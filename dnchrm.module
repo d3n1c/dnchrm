@@ -298,12 +298,18 @@ function dnchrm_search_content_by_title($context, $title, $forceToAll = FALSE) {
  * @return array
  *   result array if founded
  */
-function dnchrm_search_content_by_title_and_person($context, $title, $person, $forceToAll = FALSE) {
-  $scheme = dnchrm_content_type_schema_vars(TRUE, $context);
+function dnchrm_search_content_by_title_and_person($module, $context, $title, $person, $forceToAll = FALSE) {
+  $function = $module . '_content_type_schema_vars';
+  if (!function_exists($function)) {
+    unset ($function);
+    return;
+  }
+  $scheme = $function(TRUE, $context);
   if (empty($scheme['content_type'])) {
     unset ($scheme);
     return;
   }
+  unset ($function);
   $query = new EntityFieldQuery();
   $query->entityCondition('entity_type', 'node');
   $query->entityCondition('bundle', $scheme['content_type']);
@@ -366,12 +372,20 @@ function dnchrm_search_content_by_title_and_person($context, $title, $person, $f
  * @return array
  *   result array if founded, or NULL if otherwise
  */
-function dnchrm_get_data_by_person($person, $context, $field = NULL, $render = NULL) {
-  $scheme = dnchrm_content_type_schema_vars(TRUE, $context);
+function dnchrm_get_data_by_person($person, $module, $context, $field = NULL, $render = NULL) {
+  $function = $module . '_content_type_schema_vars';
+  if (!function_exists($function)) {
+    unset ($function);
+    return;
+  }
+  
+  $scheme = $function(TRUE, $context);
   if (empty($scheme['content_type']) || empty($scheme['fields']['person'])) {
     unset ($scheme);
     return;
   }
+  unset ($function);
+  
   $query = new EntityFieldQuery();
   $query->entityCondition('entity_type', 'node');
   $query->entityCondition('bundle', $scheme['content_type']);
@@ -532,19 +546,34 @@ function dnchrm_build_tabled_infos_form(&$form, &$form_state) {
   if (empty($form_state['storage']['person']) || empty($form_state['storage']['context'])) {
     return $form;
   }
-  $scheme = dnchrm_content_type_schema_vars(TRUE, $form_state['storage']['context']);
+  $module = empty($form_state['storage']['module']) ? 'dnchrm' : $form_state['storage']['module'];
+  $function = $module . '_content_type_schema_vars';
+  if (!function_exists($function)) {
+    unset ($function);
+    return $form;
+  }
+  
+  $scheme = $function(TRUE, $form_state['storage']['context']);
   if (empty($scheme['content_type'])) {
     unset($scheme);
     drupal_set_message(t('No valid global configuration :('), 'error', FALSE);
     return $form;
   }
+  unset($function);
   $bio = dncsystem_content_get_data('dnchrm', 'persons', $form_state['storage']['person'], NULL, 'default');
   if (empty($bio[$form_state['storage']['person']])) {
     unset ($bio, $scheme);
     drupal_set_message(t('No data bio found by this person :('), 'error', FALSE);
     return $form;
   }
-  $defaults = dnchrm_get_data_by_person($form_state['storage']['person'], $form_state['storage']['context'], NULL, 'default');
+  $defaults = dnchrm_get_data_by_person(
+          $form_state['storage']['person'],
+          $module,
+          $form_state['storage']['context'],
+          NULL,
+          'default'
+          );
+  unset ($module);
   if (empty($defaults)) {
     unset($defaults, $bio);
     return $form;
@@ -842,11 +871,18 @@ function dnchrm_build_add_item_form(&$form, &$form_state) {
     }
   }
   
-  $scheme = dnchrm_content_type_schema_vars(TRUE, $form_state['storage']['context']);
+  $function = (empty($form_state['storage']['module']) ? 'dnchrm' : $form_state['storage']['module']) . '_content_type_schema_vars';
+  if (!function_exists($function)) {
+    unset ($function);
+    return $form;
+  }
+ 
+  $scheme = $function(TRUE, $form_state['storage']['context']);
   if (empty($scheme['content_type'])) {
     unset ($scheme);
     return $form;
   }
+  unset ($function);
   $ntype = node_type_get_type($scheme['content_type']);
   if (empty($form_state['storage']['result'])) {
     $form['title'] = array(
@@ -940,7 +976,19 @@ function dnchrm_build_add_item_form_submit(&$form, &$form_state) {
       'context' => $form_state['values']['context'],
       'person' => $form_state['values']['person'],
       'title' => $form_state['values']['title'],
+      'module' => $form_state['values']['module'],
+      'includefields' => array(
+        'person' => $form_state['values']['person'],
+      ),
     );
+    if (!empty($form_state['values']['destination'])) {
+      $request['destination'] = $form_state['values']['destination'];
+    }
+    if (!empty($form_state['values']['includefields'])) {
+      foreach ($form_state['values']['includefields'] as $keys => $values) {
+        $request['includefields'][$keys] = $values;
+      }
+    }
     $request = urlencode(base64_encode(serialize($request)));
     drupal_goto('dnchrm/add-content-by-person/' . $request);
     unset ($request);
@@ -950,11 +998,13 @@ function dnchrm_build_add_item_form_submit(&$form, &$form_state) {
   $node->status = NODE_PUBLISHED;
   node_save($node);
   unset ($node);
+  $destination = empty($form_state['values']['destination']) ? 'dnchrm/bio/' . $form_state['values']['person'] . '/' . $form_state['values']['context'] : $form_state['values']['destination'];
   drupal_goto('node/' . $form_state['vales']['choosed'] . '/edit', array(
     'query' => array(
-      'destination' => 'dnchrm/bio/' . $form_state['values']['person'] . '/' . $form_state['values']['context']
+      'destination' => $destination
     )
   ));
+  unset ($destination);
 }
 
 /**
@@ -969,14 +1019,32 @@ function dnchrm_build_add_item_form_submit(&$form, &$form_state) {
 function dnchrm_item_add_search_by_title(&$form, &$form_state) {
   form_state_values_clean($form_state);
   $form_state['rebuild'] = TRUE;
-  $result = dnchrm_search_content_by_title_and_person($form_state['values']['context'], $form_state['values']['title'], $form_state['values']['person'], TRUE);
+  $result = dnchrm_search_content_by_title_and_person(
+          $form_state['values']['module'],
+          $form_state['values']['context'],
+          $form_state['values']['title'],
+          $form_state['values']['person'],
+          TRUE
+          );
   if (empty($result)) {
     unset ($result);
     $request = array(
       'context' => $form_state['values']['context'],
       'person' => $form_state['values']['person'],
       'title' => $form_state['values']['title'],
+      'module' => $form_state['values']['module'],
+      'includefields' => array(
+        'person' => $form_state['values']['person'],
+      ),
     );
+    if (!empty($form_state['values']['destination'])) {
+      $request['destination'] = $form_state['values']['destination'];
+    }
+    if (!empty($form_state['values']['includefields'])) {
+      foreach ($form_state['values']['includefields'] as $keys => $values) {
+        $request['includefields'][$keys] = $values;
+      }
+    }
     $request = urlencode(base64_encode(serialize($request)));
     drupal_goto('dnchrm/add-content-by-person/' . $request);
     unset ($request);
@@ -992,17 +1060,27 @@ function dnchrm_item_add_search_by_title(&$form, &$form_state) {
     $node->status = NODE_PUBLISHED;
     node_save($node);
     unset ($node);
+    $destination = empty($form_state['values']['destination']) ? 'dnchrm/bio/' . $form_state['values']['person'] . '/' . $form_state['values']['context'] : $form_state['values']['destination'];
     drupal_goto('node/' . $dump . '/edit', array(
       'query' => array(
-        'destination' => 'dnchrm/bio/' . $form_state['values']['person'] . '/' . $form_state['values']['context']
+        'destination' => $destination
       )
     ));
-    unset($result, $dump);
+    unset($result, $dump, $destination);
   }
   $form_state['storage']['title'] = $form_state['values']['title'];
   $form_state['storage']['person'] = $form_state['values']['person'];
   $form_state['storage']['context'] = $form_state['values']['context'];
   $form_state['storage']['result'] = $result;
+  if (!empty($form_state['values']['module'])) {
+    $form_state['storage']['module'] = $form_state['values']['module'];
+  }
+  if (!empty($form_state['values']['destination'])) {
+    $form_state['storage']['destination'] = $form_state['values']['destination'];
+  }
+  if (!empty($form_state['values']['includefields'])) {
+    $form_state['storage']['includefields'] = $form_state['values']['includefields'];
+  }
   unset ($result);
 }
 
@@ -1035,11 +1113,18 @@ function dnchrm_custom_adding_node($request = NULL) {
   }
   unset ($request);
   
-  $scheme = dnchrm_content_type_schema_vars(TRUE, $context);
+  $function = (empty($module) ? 'dnchrm' : $module) . '_content_type_schema_vars';
+  if (!function_exists($function)) {
+    unset($function);
+    return;
+  }
+  
+  $scheme = $function(TRUE, $context);
   if (empty($scheme['content_type'])) {
     unset ($scheme);
     return;
   }
+  unset ($function);
   
   module_load_include('inc', 'node', 'node.pages');
   global $user;
@@ -1053,18 +1138,22 @@ function dnchrm_custom_adding_node($request = NULL) {
     'title' => empty($title) ? '' : check_plain($title),
   );
   node_object_prepare($node);
-  if ($scheme['fields']['person'] == 'title') {
-    $node->title = $person;
-  }
-  else {
-    $finfo = field_info_field($scheme['fields']['person']);
-    $column = isset($finfo['columns']['target_id']) ? 'target_id' : 'value';
-    $node->{$scheme['fields']['person']}[$node->language][0][$column] = $person;
-    unset ($finfo, $column);
+  foreach ($scheme['fields'] as $keys => $values) {
+    if (!empty($includefields[$keys])) {
+      if ($values == 'title') {
+        $node->title = $includefields[$keys];
+      }
+      else {
+        $finfo = field_info_field($values);
+        $column = isset($finfo['columns']['target_id']) ? 'target_id' : 'value';
+        $node->{$values}[$node->language][0][$column] = $includefields[$keys];
+        unset ($finfo, $column);
+      }
+    }
   }
   drupal_set_title(t('Create @name', array('@name' => $types[$scheme['content_type']]->name)), PASS_THROUGH);
   $form = drupal_get_form($scheme['content_type'] . '_node_form', $node);
-  unset ($node, $types, $scheme, $title, $person, $context);
+  unset ($node, $types, $scheme, $title, $person, $includefields, $context, $module, $destination);
   return drupal_render($form);
 }
 

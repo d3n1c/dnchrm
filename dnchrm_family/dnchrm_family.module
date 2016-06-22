@@ -1,0 +1,372 @@
+<?php
+
+/* 
+ * Copyright (C) 2016 denic wibowo
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
+/**
+ * @file
+ * Module to handle family of human resource management
+ * 
+ * Handling families data to handle management of human resources
+ */
+
+/**
+ * Implementation of hook_load
+ * @return arg
+ **/
+function dnchrm_family_load($arg) {
+  return check_plain($arg);
+}
+
+/**
+ * Implementation of hook_menu
+ * 
+ * @return array
+ */
+function dnchrm_family_menu() {
+  $items = array();
+  $items['admin/config/dncsystem/dnchrm/family'] = array(
+    'title' => 'Family Params',
+    'description' => 'Family parameters and configurations',
+    'access arguments' => array('administer site configuration'),
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('dnchrm_family_admin_params'),
+    'file' => 'dnchrm_family.admin.inc',
+  );
+  $items['dnchrm/family-mate/add/%dnchrm_family'] = array(
+    'title' => 'Add Mate',
+    'description' => 'Add mate data information of the person',
+    'access arguments' => array('use dnc hrm'),
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('dnchrm_family_mate_add', 3),
+    'type' => MENU_CALLBACK,
+    'file' => 'dnchrm_family.admin.inc',
+  );
+  $items['dnchrm/family'] = array(
+    'title' => 'Family Data',
+    'description' => 'Family data information',
+    'access arguments' => array('view dnc hrm'),
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('dnchrm_family_listing'),
+    'type' => MENU_NORMAL_ITEM,
+  );
+  $items['dnchrm/family/%dnchrm_family/%'] = array(
+    'title' => 'Person\'s Mate',
+    'description' => 'Mate data information of the person',
+    'access arguments' => array('view dnc hrm'),
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('dnchrm_family_mate', 2, 3),
+    'type' => MENU_NORMAL_ITEM,
+    'file' => 'dnchrm_family.admin.inc',
+  );
+  $items['dnchrm/family/%dnchrm_family/%/add'] = array(
+    'title' => 'Add Child',
+    'description' => 'Add child data information of the person and it\'s mate',
+    'access arguments' => array('use dnc hrm'),
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('dnchrm_family_child_add', 2, 3),
+    'type' => MENU_LOCAL_ACTION,
+    'file' => 'dnchrm_family.admin.inc',
+  );
+  
+  return $items;
+}
+
+/**
+ * Get content type scheme that be used in the system
+ * It can be source of the script or result from converting action
+ * 
+ * @param boolean $localConvert
+ *   True will get the result convert, or false for the source
+ * @param array $field
+ *   Source field name, can be array, string or NULL
+ *   This param will limit the output result on given field name
+ * 
+ * @return array
+ *   Resulting scheme of source or convert result
+ */
+function dnchrm_family_content_type_schema_vars($localConvert = FALSE, $field = NULL, $justinfos = FALSE) {
+  $source = array(
+    'mates' => array('title', 'person', 'gender', 'date_of_birth', 'legal_basis', 'attachments'),
+    'childrens' => array('title', 'person', 'mate', 'gender', 'date_of_birth', 'legal_basis', 'attachments'),
+  );
+  if ($localConvert !== FALSE) {
+    $source = dncctypevars_get_ctype_scheme_vars('dnchrm_family', $source);
+  }
+  else {
+    if ($justinfos !== FALSE) {
+      $source = dncctypevars_get_scheme_infos('dnchrm_family', $source);
+    }
+  }
+  return empty($field) ? $source : (empty($source[$field]) ? NULL : $source[$field]);
+}
+
+/**
+ * Listing data family of persons
+ * 
+ * @param array $form
+ * @param array $form_state
+ * @return string|array
+ */
+function dnchrm_family_listing(array $form = array(), array $form_state = array()) {
+  $scheme = dnchrm_content_type_schema_vars(TRUE, 'persons');
+  if (empty($scheme['content_type'])) {
+    unset ($scheme);
+    return;
+  }
+  $nodetype = node_type_get_type($scheme['content_type']);
+  $table = array();
+  $table['header'] = array(
+    'num' => array(
+      'data' => t('Num.'),
+      'width' => '5%',
+      'style' => 'text-align: right',
+      'type' => 'constant',
+    ),
+    'person' => array(
+      'data' => $nodetype->title_label,
+    ),
+    'mate' => array(
+      'data' => t('Mate'),
+    ),
+  );
+  $limit = 10;
+  $query = new EntityFieldQuery();
+  $query->entityCondition('entity_type', 'node');
+  $query->entityCondition('bundle', $scheme['content_type']);
+  $query->propertyCondition('status', NODE_PUBLISHED);
+  $query->addMetaData('account', user_load(1));
+  $query->pager($limit);
+  $query->tableSort($table['header']);
+  $result = $query->execute();
+  unset ($query);
+  if (empty($result['node'])) {
+    unset ($result);
+    return $form;
+  }
+  $table['rows'] = array();
+  $nodes = node_load_multiple(array_keys($result['node']));
+  $page = empty($_REQUEST['page']) ? 0 : $_REQUEST['page'];
+  $i = ($page * $limit) + 1;
+  unset ($result, $page, $limit);
+  foreach ($nodes as $node) {
+    $rows = array();
+    $data = dncsystem_retrieve_node_data($scheme, $node, NULL, 'default');
+    $rows['num'] = array(
+      'data' => $i . '.',
+      'style' => 'text-align: right',
+    );
+    $rows['person'] = array(
+      'data' => $data['title'] . ' (' . dncsystem_count_age($data['date_of_birth'], FALSE, TRUE) . ')',
+    );
+    $dump = dnchrm_family_get_person_mates($data['nid']);
+    if (!empty($dump)) {
+      $mates = '<ul>';
+      foreach ($dump as $keys => $values) {
+        $display = $values['title'] . ' (' . dncsystem_count_age($values['date_of_birth'], FALSE, TRUE) . ')';
+        $display = l($display, 'dnchrm/family/' . $data['nid'] . '/' . $values['nid']);
+        $mates .= '<li>' . $display . '</li>';
+        unset ($display);
+      }
+      $mates .= '</ul>';
+    }
+    else {
+      $mates = '<strong>+</strong> ' . l(t('Add One'), 'dnchrm/family-mate/add/' . $data['nid']);
+    }
+    unset ($dump);
+    $rows['mate'] = array(
+      'data' => $mates,
+    );
+    $table['rows'][$node->nid] = $rows;
+    unset ($data, $rows);
+    $i++;
+  }
+  unset ($scheme, $i);
+  $form['ctable'] = array(
+    '#type' => 'item',
+    '#markup' => theme('table', $table),
+    '#weight' => 20,
+  );
+  unset ($table);
+  return $form;
+}
+
+/**
+ * Getting mate by given person nid
+ * 
+ * @param integer $person
+ *   NID of the person
+ * 
+ * @return array
+ *   List of the person's mates
+ */
+function dnchrm_family_get_person_mates($person) {
+  $data = dncsystem_content_get_data('dnchrm', 'persons', $person);
+  if (empty($data)) {
+    unset ($data);
+    return;
+  }
+  $scheme = dnchrm_family_content_type_schema_vars(TRUE, 'mates');
+  if (empty($scheme['content_type'])) {
+    unset ($scheme);
+    return;
+  }
+  
+  $query = new EntityFieldQuery();
+  $query->entityCondition('entity_type', 'node');
+  $query->entityCondition('bundle', $scheme['content_type']);
+  $query->propertyCondition('status', NODE_PUBLISHED);
+  $query->addMetaData('account', user_load(1));
+  if ($scheme['fields']['person'] == 'title') {
+    $query->propertyCondition('title', $person);
+  }
+  else {
+    $finfo = field_info_field($scheme['fields']['person']);
+    $column = isset($finfo['columns']['target_id']) ? 'target_id' : 'value';
+    $query->fieldCondition($scheme['fields']['person'], $column, $person);
+    unset ($finfo);
+  }
+  $result = $query->execute();
+  if (empty($result['node'])) {
+    unset ($result);
+    return;
+  }
+  
+  $return = array();
+  $nodes = node_load_multiple(array_keys($result['node']));
+  unset ($result);
+  foreach ($nodes as $node) {
+    $return[$node->nid] = dncsystem_retrieve_node_data($scheme, $node, NULL, 'full', TRUE);
+  }
+  unset ($scheme, $nodes, $node);
+  return $return;
+}
+
+/**
+ * Implementing hook_form_node_form_alter
+ * to embeded some information and popup link form
+ * and add integrity data person in some content type
+ * 
+ * @param array $form
+ * @param array $form_state
+ * @param string $form_id
+ * 
+ * @return array
+ */
+function dnchrm_family_form_node_form_alter(&$form, &$form_state, $form_id) {
+  $scheme = dnchrm_family_content_type_schema_vars(TRUE);
+  foreach ($scheme as $keys => $values) {
+    if ($form['#node']->type == $values['content_type']) {
+      if (!user_access('use dnc hrm')) {
+        drupal_set_message(t('Sorry you unauthorized :('), 'error', FALSE);
+        drupal_goto('dnchrm/family');
+        return;
+      }
+    }
+    foreach ($values['fields'] as $key => $value) {
+      if (in_array($key, array('person', 'mate'))) {
+        if (!empty($value)) {
+          if ($form['#node']->type == $values['content_type']) {
+            if (empty($form['#node']->{$value}[$form[$value]['#language']])) {
+              drupal_set_message(t('Please use this menu to update this content type'), 'error', FALSE);
+              drupal_set_message(t('Choose one of the @someone by clicking on the name', array('@someone' => $key)), 'error', FALSE);
+              drupal_goto('dnchrm/family');
+              return;
+            }
+            $instance = field_info_instance('node', $value, $values['content_type']);
+            if ($instance['widget']['type'] == 'entityreference_autocomplete') {
+              $form[$value][$form[$value]['#language']][0]['target_id']['#type'] = 'hidden';
+            }
+            else {
+              $form[$value][$form[$value]['#language']]['#type'] = 'hidden';
+            }
+            unset ($instance);
+          }
+        }
+      }
+    }
+  }
+  unset ($scheme);
+}
+
+/**
+ * Get data by given person and mate info
+ * 
+ * @param string $person
+ *   nid of the person
+ * @param string $context
+ *   context of the content type that have person field
+ * @param string $field
+ *   filtering field name target to view, can be string if
+ *   only one field that will be shown, or in array to limit
+ *   some fields only, or NULL to show all fields
+ * @param string $render
+ *   render string to view reference title instead the nid
+ *   or listing key
+ * 
+ * @return array
+ *   result array if founded, or NULL if otherwise
+ */
+function dnchrm_family_get_data_by_person_and_mate($person, $mate, $module, $context, $field = NULL, $render = NULL) {
+  $function = $module . '_content_type_schema_vars';
+  if (!function_exists($function)) {
+    unset ($function);
+    return;
+  }
+  
+  $scheme = $function(TRUE, $context);
+  if (empty($scheme['content_type']) || empty($scheme['fields']['person']) || empty($scheme['fields']['mate'])) {
+    unset ($scheme);
+    return;
+  }
+  unset ($function);
+  
+  $query = new EntityFieldQuery();
+  $query->entityCondition('entity_type', 'node');
+  $query->entityCondition('bundle', $scheme['content_type']);
+  $query->propertyCondition('status', NODE_PUBLISHED);
+  $query->addMetaData('account', user_load(1));
+  $query->propertyOrderBy('nid');
+  foreach ($scheme['fields'] as $keys => $values) {
+    if (in_array($keys, array('person', 'mate'))) {
+      if ($values == 'title') {
+        $query->propertyCondition('title', ${$keys});
+      }
+      else {
+        $finfo = field_info_field($values);
+        $column = isset($finfo['columns']['target_id']) ? 'target_id' : 'value';
+        $query->fieldCondition($values, $column, ${$keys});
+        unset ($finfo);
+      }
+    }
+  }
+  $result = $query->execute();
+  unset ($query);
+  if (empty($result['node'])) {
+    unset ($result);
+    return;
+  }
+  $nodes = node_load_multiple(array_keys($result['node']));
+  unset ($result);
+  $return = array();
+  foreach ($nodes as $node) {
+    $return[$node->nid] = dncsystem_retrieve_node_data($scheme, $node, $field, $render);
+  }
+  unset($scheme, $node, $nodes);
+  return $return;
+}
+
