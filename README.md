@@ -1,4 +1,4 @@
-# dncsystem
+# dnchrm
 DNC System to manage Human Resource Management
 
 This module is used to manage human resources information.
