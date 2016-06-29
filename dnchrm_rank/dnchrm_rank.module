@@ -256,6 +256,11 @@ function dnchrm_rank_form_node_form_alter(&$form, &$form_state, $form_id) {
         drupal_goto('dnchrm/bio');
         return;
       }
+      if ($keys == 'types_of_rank') {
+        drupal_set_message(t('Use this menu please!'), 'warning', FALSE);
+        drupal_goto('dnchrm/rank/types-of-rank');
+        return;
+      }
     }
     if (!empty($values['fields']['person'])) {
       if ($form['#node']->type == $values['content_type']) {
