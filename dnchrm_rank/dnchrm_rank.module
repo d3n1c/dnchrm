@@ -330,7 +330,7 @@ function dnchrm_rank_form_node_form_alter(&$form, &$form_state, $form_id) {
  * @return array
  *   List of the available types if founde, or NULL if otherwise
  */
-function dnchrm_rank_get_types_of_rank($effective_date, $structural = TRUE) {
+function dnchrm_rank_get_types_of_rank($effective_date, $structural = TRUE, $all = FALSE) {
   $scheme = dnchrm_rank_content_type_schema_vars(TRUE, 'types_of_rank');
   if (empty($scheme['content_type'])) {
     unset ($scheme);
@@ -340,7 +340,9 @@ function dnchrm_rank_get_types_of_rank($effective_date, $structural = TRUE) {
   $query = new EntityFieldQuery();
   $query->entityCondition('entity_type', 'node');
   $query->entityCondition('bundle', $scheme['content_type']);
-  $query->propertyCondition('status', NODE_PUBLISHED);
+  if (empty($all)) {
+    $query->propertyCondition('status', NODE_PUBLISHED);
+  }
   $query->addMetaData('account', user_load(1));
   foreach ($scheme['fields'] as $keys => $values) {
     if (in_array($keys, array('effective_date', 'structural_boolean'))) {
@@ -700,8 +702,8 @@ function dnchrm_rank_types_of_rank_references_form(array $form = array(), array 
       }
       if (user_access('use dnc hrm')) {
         $delete = array(
-          '#id' => 'items-' . $keys . '-delete',
-          '#name' => 'items[' . $keys . '][delete]',
+          '#id' => 'item-' . $keys . '-delete',
+          '#name' => 'tor[' . $keys . '][delete]',
           '#type' => 'checkbox',
           '#title' => t('delete'),
         );
@@ -734,7 +736,7 @@ function dnchrm_rank_types_of_rank_references_form(array $form = array(), array 
       }
     }
     $delete = array(
-      '#id' => 'items-new-delete',
+      '#id' => 'tor-new-delete',
       '#type' => 'item',
       '#markup' => t('new'),
     );
@@ -770,41 +772,61 @@ function dnchrm_rank_types_of_rank_references_form_submit(&$form, &$form_state) 
   if (!empty($form_state['input']['tor']) &&
         !empty($form_state['values']['effective_date'])) {
     foreach ($form_state['input']['tor'] as $keys => $values) {
-      if (!empty($values['title']) && !empty($values['abbreviation'])) {
-        $values['level'] = empty($values['level']) ? 0 : $values['level'];
-        settype($values['level'], 'int');
-        $new = array(
-          'effective_date' => $form_state['values']['effective_date'],
-          'structural_boolean' => empty($form_state['values']['structural_boolean']) ? 0 : 1,
-        );
-        foreach ($values as $key => $value) {
-          $new[$key] = $value;
-        }
+      if (!empty($values['delete'])) {
+        // delete action here;
+        dncsystem_content_delete('dnchrm_rank', 'types_of_rank', $keys);
       }
-      if (!empty($new)) {
-        if ($keys != 'new') {
-          $data = dncsystem_content_get_data('dnchrm_rank', 'types_of_rank', $keys);
-          if (empty($data[$keys])) {
-            unset ($data, $new);
+      else {
+        if (!empty($values['title']) && !empty($values['abbreviation'])) {
+          $values['level'] = empty($values['level']) ? 0 : $values['level'];
+          settype($values['level'], 'int');
+          $new = array(
+            'effective_date' => $form_state['values']['effective_date'],
+            'structural_boolean' => empty($form_state['values']['structural_boolean']) ? 0 : 1,
+          );
+          foreach ($values as $key => $value) {
+            $new[$key] = $value;
           }
-          $data = $data[$keys];
-          foreach ($data as $key => $value) {
-            if (isset($new[$key]) && $new[$key] != $value) {
-              $execute = 1;
-              break;
-            }
-          }
-          unset ($data);
-          if (empty($execute)) {
-            unset ($new);
-          }
-          unset ($execute);
-          $new['nid'] = $keys;
         }
         if (!empty($new)) {
-          dncsystem_content_update_data('dnchrm_rank', 'types_of_rank', $new);
+          if ($keys != 'new') {
+            $data = dncsystem_content_get_data('dnchrm_rank', 'types_of_rank', $keys);
+            if (empty($data[$keys])) {
+              unset ($data, $new);
+            }
+            $data = $data[$keys];
+            foreach ($data as $key => $value) {
+              if (isset($new[$key]) && $new[$key] != $value) {
+                $execute = 1;
+                break;
+              }
+            }
+            unset ($data);
+            if (empty($execute)) {
+              unset ($new);
+            }
+            unset ($execute);
+            $new['nid'] = $keys;
+          }
+          else {
+            $check = dnchrm_rank_get_types_of_rank($new['effective_date'], $new['structural_boolean'], TRUE);
+            if (!empty($check)) {
+              foreach ($check as $key => $value) {
+                if ($value['title'] == $new['title']) {
+                  $new['nid'] = $key;
+                  $force = TRUE;
+                  break;
+                }
+              }
+            }
+            unset ($check);
+          }
+          if (!empty($new)) {
+            $force = empty($force) ? FALSE : TRUE;
+            dncsystem_content_update_data('dnchrm_rank', 'types_of_rank', $new, $force);
+          }
+          unset ($force, $new);
         }
-        unset ($new);
       }
     }
   }
