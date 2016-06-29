@@ -38,6 +38,7 @@ function dnchrm_bio_contact_manage (array $form = array(), array $form_state = a
     return $form;
   }
   
+  $form_state['storage']['datatitle'] = 'Personal Datas';
   $form_state['storage']['person'] = $person;
   $form_state['storage']['context'] = 'contacts';
   $form_state['storage']['getnewref'] = array(
@@ -131,7 +132,11 @@ function dnchrm_bio_contact_add(array $form = array(), array $form_state = array
 function dnchrm_add_new_tcontact_popup($js = NULL) {
   // degrade half-assed to no js
   if(!$js) {
-    return drupal_get_form('dnchrm_register_type_of_contact');
+    $contexts = array(
+      'context' => 'types_of_contact',
+    );
+    $contexts = urlencode(base64_encode(serialize($contexts)));
+    return drupal_get_form('dnchrm_register_reference', $contexts);
   }
   
   // adelante!
@@ -139,7 +144,8 @@ function dnchrm_add_new_tcontact_popup($js = NULL) {
   ctools_include('ajax');
   $form_state['title'] = t('Register Type of Contact');
   $form_state['ajax'] = TRUE;
-  $output = ctools_modal_form_wrapper('dnchrm_register_type_of_contact', $form_state);
+  $form_state['storage']['context'] = 'types_of_contact';
+  $output = ctools_modal_form_wrapper('dnchrm_register_reference', $form_state);
   if (!empty($form_state['executed'])) {
     $output = array();
     $output[] = ctools_modal_command_dismiss(t('Success!'));

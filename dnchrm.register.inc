@@ -37,6 +37,7 @@ function dnchrm_bio_register_manage (array $form = array(), array $form_state = 
   if (empty($person)) {
     return $form;
   }
+  $form_state['storage']['datatitle'] = 'Personal Datas';
   $form_state['storage']['person'] = $person;
   $form_state['storage']['context'] = 'registers';
   $form_state['storage']['drupalrender'] = 'teaser';

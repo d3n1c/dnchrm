@@ -101,7 +101,7 @@ function dnchrm_bio_listing(array $form = array(), array $form_state = array()) 
   unset ($result, $page, $limit);
   foreach ($nodes as $node) {
     $rows = array();
-    $data = dncsystem_retrieve_node_data($scheme, $node, NULL, 'default');
+    $data = dncsystem_retrieve_node_data($scheme, $node, NULL, 'full');
     $rows['num'] = array(
       'data' => $i . '.',
       'style' => 'text-align: right',
@@ -110,6 +110,14 @@ function dnchrm_bio_listing(array $form = array(), array $form_state = array()) 
       $display = !empty($data['v_' . $key]['#markup']) ? $data['v_' . $key]['#markup'] : $data[$key];
       if ($key == 'title') {
         $display = l($display, 'dnchrm/bio/' . $node->nid);
+      }
+      elseif($key == 'picture') {
+        if (!empty($data['v_picture'])) {
+          $show = image_style_url($data['v_picture']['#image_style'], $data['v_picture']['#item']['uri']);
+          $real = file_create_url($data['v_picture']['#item']['uri']);
+          $display = dncsystem_circle_image($show, $real);
+          unset ($show, $real);
+        }
       }
       $rows[$key] = array(
         'data' => $display,
@@ -211,113 +219,31 @@ function dnchrm_bio_add_person() {
  * @return string|array
  *   Form array that rendered by drupal_get_form
  */
-function dnchrm_bio_person_manage(array $form = array(), array $form_state = array(), $person = NULL) {
+function dnchrm_bio_person_manage($person) {
   $scheme = dnchrm_content_type_schema_vars(TRUE, 'persons');
-  if (empty($scheme['content_type']) || empty($person)) {
+  if (empty($scheme['content_type'])) {
     unset ($scheme);
-    return $form;
+    return;
   }
-  if (empty($form_state['storage']['nid'])) {
-    $form_state['storage']['nid'] = $person;
-  }
-  $form['nid'] = array(
-    '#type' => 'value',
-    '#value' => $form_state['storage']['nid'],
-  );
-  $node = node_load($form_state['storage']['nid']);
+  $node = node_load($person);
   if (empty($node->type) || $node->type != $scheme['content_type']) {
-    unset ($node, $scheme);
-    drupal_set_message(t('Wrong data !'), 'error', FALSE);
-    return $form;
+    unset ($node);
+    return;
   }
-  $data = dncsystem_retrieve_node_data($scheme, $node, NULL, 'default');
-  $ntype = node_type_get_type($scheme['content_type']);
-  foreach ($scheme['fields'] as $keys => $values) {
-    if ($values == 'title') {
-      $form[$keys] = array(
-        '#type' => 'textfield',
-        '#size' => 40,
-        '#title' => $ntype->title_label,
-        '#required' => TRUE,
-        '#weight' => -10,
-        '#default_value' => empty($data[$keys]) ? NULL : $data[$keys],
-      );
-    }
-    else {
-      $instance = field_info_instance('node', $values, $scheme['content_type']);
-      $form[$keys]['#title'] = $instance['label'];
-      $form[$keys]['#description'] = $instance['description'];
-      $form[$keys]['#required'] = $instance['required'];
-      $form[$keys]['#weight'] = $instance['widget']['weight'];
-      $form[$keys]['#default_value'] = empty($data[$keys]) ? NULL : $data[$keys];
-      $finfo = field_info_field($values);
-      if ($instance['widget']['type'] == 'date_popup') {
-        $form[$keys]['#type'] = 'date_popup';
-        foreach ($instance['widget']['settings'] as $key => $value) {
-          if (!empty($value)) {
-            $key = '#date_' . preg_replace('/^input_/', '', $key);
-            if ($key == '#date_format') {
-              $value = dncsystem_granularity_to_date_format($finfo['settings']['granularity']);
-            }
-            $form[$keys][$key] = $value;
-          }
-        }
-      }
-      elseif (preg_match('/^list/', $finfo['type'])) {
-        $form[$keys]['#type'] = 'select';
-        $form[$keys]['#options'] = $finfo['settings']['allowed_values'];
-      }
-      elseif ($finfo['type'] == 'entityreference') {
-        $form[$keys]['#type'] = 'select';
-        $form[$keys]['#options'] = $finfo['settings']['allowed_values'];
-      }
-      else {
-        $form[$keys]['#type'] = 'textfield';
-        $form[$keys]['#size'] = empty($instance['widget']['settings']['size']) ? 40 : $instance['widget']['settings']['size'];
-        $form[$keys]['#maxlength'] = empty($finfo['settings']['max_length']) ? 255 : $finfo['settings']['max_length'];
-      }
-      unset ($finfo, $instance);
-    }
-    if (!user_access('use dnc hrm')) {
-      $form[$keys]['#type'] = 'item';
-      $form[$keys]['#markup'] = empty($data['v_' . $keys]['#markup']) ? (empty($data[$keys]) ? NULL : $data[$keys]) : (preg_match('/date/', $keys) ? dncsystem_date('l, j F Y', strtotime($data[$keys])) : $data['v_' . $keys]['#markup']);
-      $form[$keys]['#prefix'] = '<div class="container-inline">';
-      $form[$keys]['#suffix'] = '</div>';
-      $form[$keys]['#title'] .= ': ';
-      unset ($form[$keys]['#description'], $form[$keys]['#required']);
-    }
-    else {
-      $form['submit'] = array(
-        '#type' => 'submit',
-        '#value' => t('save'),
-        '#weight' => 200,
-      );
-    }
+  
+  if (!user_access('use dnc hrm')) {
+    $display = node_view($node);
+    unset ($node);
+    return drupal_render($display);
   }
-  return $form;
-}
-
-/**
- * Implementing hook_submit for person data manage list
- * 
- * @param array $form
- * @param array $form_state
- */
-function dnchrm_bio_person_manage_submit(&$form, &$form_state) {
-  form_state_values_clean($form_state);
-  if (user_access('use dnc hrm')) {
-    $data = array('nid' => $form_state['values']['nid']);
-    $scheme = dnchrm_content_type_schema_vars(TRUE, 'persons');
-    foreach ($scheme['fields'] as $keys => $values) {
-      if (!empty($form_state['values'][$keys])) {
-        $data[$keys] = $form_state['values'][$keys];
-      }
-    }
-    unset ($scheme);
-    dncsystem_content_update_data('dnchrm', 'persons', $data);
-    unset ($data);
-    drupal_set_message(t('Data bio have been updated successfully :)'));
-  }
-  $form_state['redirect'] = current_path();
+  
+  module_load_include('inc', 'node', 'node.pages');
+  global $user;
+  $_GET['destination'] = current_path();
+  $types = node_type_get_types();
+  drupal_set_title(t('Update @name', array('@name' => $types[$scheme['content_type']]->name)), PASS_THROUGH);
+  $form = drupal_get_form($scheme['content_type'] . '_node_form', $node);
+  unset ($node, $types, $scheme);
+  return drupal_render($form);
 }
 

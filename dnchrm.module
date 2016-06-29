@@ -101,8 +101,8 @@ function dnchrm_menu() {
     'title' => 'Personal Data',
     'description' => 'Personal data information management',
     'access arguments' => array('view dnc hrm'),
-    'page callback' => 'drupal_get_form',
-    'page arguments' => array('dnchrm_bio_person_manage', 2),
+    'page callback' => 'dnchrm_bio_person_manage',
+    'page arguments' => array(2),
     'file' => 'dnchrm.bio.inc',
     'type' => MENU_NORMAL_ITEM,
   );
@@ -208,7 +208,7 @@ function dnchrm_menu() {
  */
 function dnchrm_content_type_schema_vars($localConvert = FALSE, $field = NULL, $justinfos = FALSE) {
   $source = array(
-    'persons' => array('title', 'gender', 'date_of_birth', 'nickname'),
+    'persons' => array('title', 'gender', 'date_of_birth', 'nickname', 'picture'),
     'types_of_contact' => array('title'),
     'contacts' => array('person', 'type_of_contact', 'title'),
     'domiciles' => array('title', 'person', 'city', 'province', 'country'),
@@ -460,7 +460,34 @@ function dnchrm_set_modal_settings($size = 'small') {
  * @return array
  *   form array the ready to render by drupal_get_form
  */
-function dnchrm_register_type_of_contact(array $form = array(), array $form_state = array()) {
+function dnchrm_register_reference(array $form = array(), array $form_state = array(), $contexts = NULL) {
+  if (empty($form_state['storage']['context'])) {
+    if (!empty($contexts)) {
+      $contexts = dncsystem_unserialize(base64_decode(urldecode($contexts)));
+      if (!empty($contexts)) {
+        foreach ($contexts as $keys => $values) {
+          $form_state['storage'][$keys] = $values;
+        }
+      }
+    }
+  }
+  if (empty($form_state['storage']['module'])) {
+    $form_state['storage']['module'] = 'dnchrm';
+  }
+  
+  $function = $form_state['storage']['module'] . '_content_type_schema_vars';
+  if (!function_exists($function)) {
+    drupal_set_message(t('No valid module :('), 'error', FALSE);
+    return $form;
+  }
+  $scheme = $function(TRUE, $form_state['storage']['context']);
+  unset ($function);
+  if (empty($scheme['fields'])) {
+    unset ($scheme);
+    drupal_set_message(t('No valid scheme :('), 'error', FALSE);
+    return $form;
+  }
+  
   if (!empty($form_state['ajax'])) {
     $form_state['storage']['ajax'] = $form_state['ajax'];
   }
@@ -472,16 +499,78 @@ function dnchrm_register_type_of_contact(array $form = array(), array $form_stat
       );
     }
   }
-  $form['title'] = array(
-    '#type' => 'textfield',
-    '#size' => 40,
-    '#title' => t('Title'),
-    '#prefix' => '<div class="container-inline">',
-  );
+  $ntype = node_type_get_type($scheme['content_type']);
+  foreach ($scheme['fields'] as $keys => $values) {
+    if ($values == 'title') {
+      $form[$keys]['#type'] = 'textfield';
+      $form[$keys]['#size'] = 40;
+      $form[$keys]['#title'] = $ntype->title_label . ': ';
+    }
+    else {
+      $instance = field_info_instance('node', $values, $scheme['content_type']);
+      if ($key != 'title') {
+        $form[$keys]['#title'] = $instance['label'] . ': ';
+      }
+      $finfo = field_info_field($values);
+      if ($instance['widget']['type'] == 'date_popup') {
+        $form[$keys]['#type'] = 'date_popup';
+        foreach ($instance['widget']['settings'] as $ky => $vl) {
+          if (!empty($vl)) {
+            $ky = '#date_' . preg_replace('/^input_/', '', $ky);
+            if ($ky == '#date_format') {
+              $vl = dncsystem_granularity_to_date_format($finfo['settings']['granularity']);
+            }
+            $form[$keys][$ky] = $vl;
+          }
+        }
+      }
+      elseif($instance['widget']['type'] == 'options_onoff') {
+        $form[$keys]['#type'] = 'checkbox';
+        $form[$keys]['#title'] = $instance['label'] . ' ?!';
+      }
+      elseif (preg_match('/^list/', $finfo['type'])) {
+        $form[$keys]['#type'] = 'select';
+        $form[$keys]['#options'] = $finfo['settings']['allowed_values'];
+      }
+      elseif ($finfo['type'] == 'entityreference') {
+        $options = array();
+        $conditions = array();
+        foreach ($finfo['settings']['handler_settings']['target_bundles'] as $vl) {
+          if (!empty($vl)) {
+            $conditions['type'][] = $vl;
+          }
+        }
+        $dump = entity_load($finfo['settings']['target_type'], FALSE, array('type' => $conditions));
+        unset ($conditions);
+        if (!empty($dump)) {
+          foreach ($dump as $node) {
+            $options[$node->nid] = $node->title;
+          }
+        }
+        unset ($dump);
+        $form[$keys]['#type'] = 'select';
+        $form[$keys]['#options'] = $options;
+        unset ($options);
+      }
+      else {
+        $form[$keys]['#type'] = 'textfield';
+        $form[$keys]['#size'] = empty($instance['widget']['settings']['size']) ? 40 : $instance['widget']['settings']['size'];
+        $form[$keys]['#maxlength'] = empty($finfo['settings']['max_length']) ? 255 : $finfo['settings']['max_length'];
+      }
+      unset ($finfo, $instance);
+    }
+  }
+  unset ($ntype);
+//  $form['title'] = array(
+//    '#type' => 'textfield',
+//    '#size' => 40,
+//    '#title' => t('Title'),
+//    '#prefix' => '<div class="container-inline">',
+//  );
   $form['submit'] = array(
     '#type' => 'submit',
     '#value' => t('Add'),
-    '#suffix' => '</div>',
+//    '#suffix' => '</div>',
   );
   return $form;
 }
@@ -497,9 +586,11 @@ function dnchrm_register_type_of_contact(array $form = array(), array $form_stat
  * @return string
  *   redirecting to current path
  */
-function dnchrm_register_type_of_contact_submit(&$form, &$form_state) {
+function dnchrm_register_reference_submit(&$form, &$form_state) {
   form_state_values_clean($form_state);
-  $scheme = dnchrm_content_type_schema_vars(TRUE, 'types_of_contact');
+  $function = $form_state['values']['module'] . '_content_type_schema_vars';
+  $scheme = $function(TRUE, $form_state['values']['context']);
+  unset ($function);
   if (empty($scheme['content_type'])) {
     unset($scheme);
     if (empty($form_state['values']['ajax'])) {
@@ -507,13 +598,8 @@ function dnchrm_register_type_of_contact_submit(&$form, &$form_state) {
     }
     return;
   }
-  $data = dnchrm_search_content_by_title('types_of_contact', $form_state['values']['title'], TRUE);
-  if (empty($data)) {
-    $data = array(
-      'title' => $form_state['values']['title'],
-    );
-  }
-  else {
+  $data = dnchrm_search_content_by_title($form_state['values']['context'], $form_state['values']['title'], TRUE);
+  if (!empty($data)) {
     foreach ($data as $values) {
       foreach ($values as $key => $value) {
         unset($values['v_' . $key]);
@@ -524,7 +610,12 @@ function dnchrm_register_type_of_contact_submit(&$form, &$form_state) {
     }
     $data = $dump;
   }
-  dncsystem_content_update_data('dnchrm', 'types_of_contact', $data, TRUE);
+  foreach ($scheme['fields'] as $keys => $values) {
+    if (!empty($form_state['values'][$keys])) {
+      $data[$keys] = $form_state['values'][$keys];
+    }
+  }
+  dncsystem_content_update_data($form_state['values']['module'], $form_state['values']['context'], $data, TRUE);
   unset ($data);
   if (empty($form_state['values']['ajax'])) {
     $form_state['redirect'] = current_path();
@@ -578,6 +669,17 @@ function dnchrm_build_tabled_infos_form(&$form, &$form_state) {
     unset($defaults, $bio);
     return $form;
   }
+  
+  $pdata = dncsystem_content_get_data('dnchrm', 'persons', $form_state['storage']['person'], 'title');
+  $pdata = empty($pdata[$form_state['storage']['person']]['title']) ? t('The Person') : $pdata[$form_state['storage']['person']]['title'];
+  $datatitle = empty($form_state['storage']['datatitle']) ? t('Datas') : $form_state['storage']['datatitle'];
+  $datatitle = ucwords(strtolower($datatitle));
+  drupal_set_title(t('@datatitle of @person', array(
+    '@datatitle' => $datatitle,
+    '@person' => $pdata
+  )), PASS_THROUGH);
+  unset ($pdata, $datatitle);
+  
   if (!empty($form_state['storage'])) {
     foreach ($form_state['storage'] as $keys => $values) {
       $form[$keys] = array(
@@ -819,7 +921,9 @@ function dnchrm_build_tabled_infos_form(&$form, &$form_state) {
       ctools_include('ajax');
       ctools_include('modal');
       ctools_modal_add_js();
-      dnchrm_set_modal_settings();
+      $size = empty($form_state['storage']['getnewref']['size']) ? 'small' : $form_state['storage']['getnewref']['size'];
+      dnchrm_set_modal_settings($size);
+      unset ($size);
       $editlink = ctools_modal_text_button(
         t('here'),
         $form_state['storage']['getnewref']['path'],
@@ -828,7 +932,7 @@ function dnchrm_build_tabled_infos_form(&$form, &$form_state) {
       );
       $form['addtype'] = array(
         '#type' => 'item',
-        '#markup' => t('If there are no choosed types of contact choices above, you can add one') . ' ' . $editlink,
+        '#markup' => t('If there are no choosed <strong>@title</strong> choices above, you can add one', array('@title' => strtolower($form_state['storage']['getnewref']['title']))) . ' ' . $editlink,
         '#weight' => 201,
         '#suffix' => '</div>',
         '#attributes' => array('align' => 'right'),
@@ -861,6 +965,9 @@ function dnchrm_build_add_item_form(&$form, &$form_state) {
     drupal_set_message(t('Who is the person that own this information ?! :('), 'error', FALSE);
     return $form;
   }
+  if (empty($form_state['storage']['module'])) {
+    $form_state['storage']['module'] = 'dnchrm';
+  }
   
   if (!empty($form_state['storage'])) {
     foreach ($form_state['storage'] as $keys => $values) {
@@ -871,7 +978,11 @@ function dnchrm_build_add_item_form(&$form, &$form_state) {
     }
   }
   
-  $function = (empty($form_state['storage']['module']) ? 'dnchrm' : $form_state['storage']['module']) . '_content_type_schema_vars';
+  if (!empty($form_state['storage']['pagetitle'])) {
+    drupal_set_title($form_state['storage']['pagetitle'], PASS_THROUGH);
+  }
+  
+  $function = $form_state['storage']['module'] . '_content_type_schema_vars';
   if (!function_exists($function)) {
     unset ($function);
     return $form;

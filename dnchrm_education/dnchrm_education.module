@@ -1,0 +1,413 @@
+<?php
+
+/* 
+ * Copyright (C) 2016 denic wibowo
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
+/**
+ * @file
+ * Module to handle education of human resource management
+ * 
+ * Handling educations data of management of human resources
+ */
+
+/**
+ * Implementation of hook_load
+ * @return arg
+ **/
+function dnchrm_education_load($arg) {
+  return check_plain($arg);
+}
+
+/**
+ * Implementation of hook_menu
+ * 
+ * @return array
+ */
+function dnchrm_education_menu() {
+  $items = array();
+  $items['admin/config/dncsystem/dnchrm/education'] = array(
+    'title' => 'Education Params',
+    'description' => 'Education parameters and configurations',
+    'access arguments' => array('administer site configuration'),
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('dnchrm_education_admin_params'),
+    'file' => 'dnchrm_education.admin.inc',
+  );
+  $items['dnchrm/education'] = array(
+    'title' => 'Education Data',
+    'description' => 'Education data information',
+    'access arguments' => array('view dnc hrm'),
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('dnchrm_education_person_listing'),
+    'type' => MENU_NORMAL_ITEM,
+  );
+  $items['dnchrm/education/%dnchrm_education'] = array(
+    'title' => 'Person\'s Education',
+    'description' => 'Education data information of the person',
+    'access arguments' => array('view dnc hrm'),
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('dnchrm_education_formal', 2),
+    'type' => MENU_NORMAL_ITEM,
+    'file' => 'dnchrm_education.formal.inc',
+  );
+  $items['dnchrm/education/%dnchrm_education/formals'] = array(
+    'title' => 'Formal',
+    'description' => 'Formal education data information',
+    'type' => MENU_DEFAULT_LOCAL_TASK,
+    'weight' => 1,
+  );
+  $items['dnchrm/education/%dnchrm_education/formals/add'] = array(
+    'title' => 'Add',
+    'description' => 'Add personal data formal education',
+    'access arguments' => array('use dnc hrm'),
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('dnchrm_education_formal_add', 2),
+    'type' => MENU_LOCAL_ACTION,
+    'file' => 'dnchrm_education.formal.inc',
+  );
+  $items['dnchrm/education/%dnchrm_education/informals'] = array(
+    'title' => 'Informal',
+    'description' => 'Informal education data information of the person',
+    'access arguments' => array('view dnc hrm'),
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('dnchrm_education_informal', 2),
+    'type' => MENU_LOCAL_TASK,
+    'file' => 'dnchrm_education.informal.inc',
+    'weight' => 2,
+  );
+  $items['dnchrm/education/%dnchrm_education/informals/add'] = array(
+    'title' => 'Add',
+    'description' => 'Add personal data informal education',
+    'access arguments' => array('use dnc hrm'),
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('dnchrm_education_informal_add', 2),
+    'type' => MENU_LOCAL_ACTION,
+    'file' => 'dnchrm_education.informal.inc',
+  );
+  $items['dnchrm/education/%dnchrm_education/certificates'] = array(
+    'title' => 'Certificate',
+    'description' => 'Certificate data information of the person',
+    'access arguments' => array('view dnc hrm'),
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('dnchrm_education_certificate', 2),
+    'type' => MENU_LOCAL_TASK,
+    'file' => 'dnchrm_education.certificate.inc',
+    'weight' => 3,
+  );
+  $items['dnchrm/education/%dnchrm_education/certificates/add'] = array(
+    'title' => 'Add',
+    'description' => 'Add personal data certificates',
+    'access arguments' => array('use dnc hrm'),
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('dnchrm_education_certificate_add', 2),
+    'type' => MENU_LOCAL_ACTION,
+    'file' => 'dnchrm_education.certificate.inc',
+  );
+  $items['dnchrm/education/%dnchrm_education/academic-titles'] = array(
+    'title' => 'Academic Titles',
+    'description' => 'Academic Titles data information of the person',
+    'access arguments' => array('view dnc hrm'),
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('dnchrm_education_academic_title', 2),
+    'type' => MENU_LOCAL_TASK,
+    'file' => 'dnchrm_education.academictitle.inc',
+    'weight' => 4,
+  );
+  $items['dnchrm/education/%dnchrm_education/add-title/%'] = array(
+    'title' => 'Add Title',
+    'description' => 'Add academic title in personal\'s name',
+    'access arguments' => array('use dnc hrm'),
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('dnchrm_education_academic_ask_title', 2, 4),
+    'type' => MENU_CALLBACK,
+    'file' => 'dnchrm_education.academictitle.inc',
+  );
+  $items['dnchrm/education/%dnchrm_education/academic-titles/add'] = array(
+    'title' => 'Add',
+    'description' => 'Add personal data academic titles',
+    'access arguments' => array('use dnc hrm'),
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('dnchrm_education_academic_title_add', 2),
+    'type' => MENU_CALLBACK,
+    'file' => 'dnchrm_education.academictitle.inc',
+  );
+  $items['dnchrm-education/%ctools_js/form/setelevel'] = array(
+    'title' => 'Add Educational Level',
+    'description' => 'Adding educational level reference',
+    'page callback' => 'dnchrm_education_add_new_elevel_popup',
+    'page arguments' => array(1),
+    'access arguments' => array('use dnc hrm'),
+    'type' => MENU_CALLBACK,
+    'file' => 'dnchrm_education.formal.inc',
+  );
+  
+  return $items;
+}
+
+/**
+ * Get content type scheme that be used in the system
+ * It can be source of the script or result from converting action
+ * 
+ * @param boolean $localConvert
+ *   True will get the result convert, or false for the source
+ * @param array $field
+ *   Source field name, can be array, string or NULL
+ *   This param will limit the output result on given field name
+ * 
+ * @return array
+ *   Resulting scheme of source or convert result
+ */
+function dnchrm_education_content_type_schema_vars($localConvert = FALSE, $field = NULL, $justinfos = FALSE) {
+  $source = array(
+    'educational_levels' => array('title', 'level', 'description'),
+    'formals' => array('title', 'person', 'educational_level', 'institution', 'date_of_graduate', 'attachments'),
+    'informals' => array('title', 'person', 'description', 'institution', 'date_end', 'attachments'),
+    'certificates' => array('title', 'person', 'description', 'institution', 'date_issued', 'attachments'),
+    'academic_titles' => array('title', 'person', 'prefix', 'weight', 'formal'),
+  );
+  if ($localConvert !== FALSE) {
+    $source = dncctypevars_get_ctype_scheme_vars('dnchrm_education', $source);
+  }
+  else {
+    if ($justinfos !== FALSE) {
+      $source = dncctypevars_get_scheme_infos('dnchrm_education', $source);
+    }
+  }
+  return empty($field) ? $source : (empty($source[$field]) ? NULL : $source[$field]);
+}
+
+/**
+ * Listing data persons that have education
+ * 
+ * @param array $form
+ * @param array $form_state
+ * @return string|array
+ */
+function dnchrm_education_person_listing(array $form = array(), array $form_state = array()) {
+  $scheme = dnchrm_content_type_schema_vars(TRUE, 'persons');
+  if (empty($scheme['content_type'])) {
+    unset ($scheme);
+    return;
+  }
+  $nodetype = node_type_get_type($scheme['content_type']);
+  $table = array();
+  $table['header'] = array(
+    'num' => array(
+      'data' => t('Num.'),
+      'width' => '5%',
+      'style' => 'text-align: right',
+      'type' => 'constant',
+    ),
+    'person' => array(
+      'data' => $nodetype->title_label,
+    ),
+    'age' => array(
+      'data' => t('Age'),
+    ),
+  );
+  $limit = 10;
+  $query = new EntityFieldQuery();
+  $query->entityCondition('entity_type', 'node');
+  $query->entityCondition('bundle', $scheme['content_type']);
+  $query->propertyCondition('status', NODE_PUBLISHED);
+  $query->addMetaData('account', user_load(1));
+  $query->pager($limit);
+  $query->tableSort($table['header']);
+  $result = $query->execute();
+  unset ($query);
+  if (empty($result['node'])) {
+    unset ($result);
+    return $form;
+  }
+  $table['rows'] = array();
+  $nodes = node_load_multiple(array_keys($result['node']));
+  $page = empty($_REQUEST['page']) ? 0 : $_REQUEST['page'];
+  $i = ($page * $limit) + 1;
+  unset ($result, $page, $limit);
+  foreach ($nodes as $node) {
+    $rows = array();
+    $data = dncsystem_retrieve_node_data($scheme, $node, NULL, 'default');
+    $rows['num'] = array(
+      'data' => $i . '.',
+      'style' => 'text-align: right',
+    );
+    $pview = l($data['title'], 'dnchrm/education/' . $node->nid); 
+    $rows['person'] = array(
+      'data' => $pview,
+    );
+    unset ($pview);
+    $rows['age'] = array(
+      'data' => dncsystem_count_age($data['date_of_birth'], FALSE, TRUE),
+    );
+    $table['rows'][$node->nid] = $rows;
+    unset ($data, $rows);
+    $i++;
+  }
+  unset ($scheme, $i);
+  $form['ctable'] = array(
+    '#type' => 'item',
+    '#markup' => theme('table', $table),
+    '#weight' => 20,
+  );
+  unset ($table);
+  return $form;
+}
+
+/**
+ * Implementing hook_form_node_form_alter
+ * to embeded some information and popup link form
+ * and add integrity data person in some content type
+ * 
+ * @param array $form
+ * @param array $form_state
+ * @param string $form_id
+ * 
+ * @return array
+ */
+function dnchrm_education_form_node_form_alter(&$form, &$form_state, $form_id) {
+  $scheme = dnchrm_education_content_type_schema_vars(TRUE);
+  foreach ($scheme as $keys => $values) {
+    if ($form['#node']->type == $values['content_type']) {
+      if (!user_access('use dnc hrm')) {
+        drupal_set_message(t('Sorry you unauthorized :('), 'error', FALSE);
+        drupal_goto('dnchrm/bio');
+        return;
+      }
+    }
+    if (!empty($values['fields']['person'])) {
+      if ($form['#node']->type == $values['content_type']) {
+        if (empty($form['#node']->{$values['fields']['person']}[$form[$values['fields']['person']]['#language']])) {
+          drupal_set_message(t('Please use this menu to update this content type'), 'error', FALSE);
+          drupal_set_message(t('Choose one of the person by clicking on the name'), 'error', FALSE);
+          drupal_goto('dnchrm/education');
+          return;
+        }
+        $instance = field_info_instance('node', $values['fields']['person'], $values['content_type']);
+        if ($instance['widget']['type'] == 'entityreference_autocomplete') {
+          $form[$values['fields']['person']][$form[$values['fields']['person']]['#language']][0]['target_id']['#type'] = 'hidden';
+        }
+        else {
+          $form[$values['fields']['person']][$form[$values['fields']['person']]['#language']]['#type'] = 'hidden';
+        }
+        unset ($instance);
+      }
+    }
+    if (!empty($values['fields']['formal'])) {
+      if ($form['#node']->type == $values['content_type']) {
+        if (empty($form['#node']->{$values['fields']['formal']}[$form[$values['fields']['formal']]['#language']])) {
+          drupal_set_message(t('Please use this menu to update this content type'), 'error', FALSE);
+          drupal_set_message(t('Choose one of the formal education'), 'error', FALSE);
+          drupal_goto('dnchrm/education/' . $form['#node']->{$values['fields']['person']}[$form[$values['fields']['person']]['#language']][0]['target_id']['#default_value'] . '/formals/add');
+          return;
+        }
+        $instance = field_info_instance('node', $values['fields']['formal'], $values['content_type']);
+        if ($instance['widget']['type'] == 'entityreference_autocomplete') {
+          $form[$values['fields']['formal']][$form[$values['fields']['formal']]['#language']][0]['target_id']['#type'] = 'hidden';
+        }
+        else {
+          $form[$values['fields']['formal']][$form[$values['fields']['formal']]['#language']]['#type'] = 'hidden';
+        }
+        unset ($instance);
+      }
+    }
+    if (!empty($values['fields']['educational_level'])) {
+      if ($form['#node']->type == $values['content_type']) {
+        ctools_include('ajax');
+        ctools_include('modal');
+        ctools_modal_add_js();
+        dnchrm_set_modal_settings('medium');
+        $editlink = ctools_modal_text_button(
+          t('here'),
+          'dnchrm-education/nojs/form/setelevel',
+          t('Add New Educational Level'),
+          'ctools-modal-dnchrm-modal-style'
+        );
+        $form[$values['fields']['educational_level']][$form[$values['fields']['educational_level']]['#language']]['#description'] .= '<br />' . t('If there are no choosed choices above, you can add one') . ' ' . $editlink;
+        unset ($editlink);
+      }
+    }
+  }
+  unset ($scheme);
+}
+
+/**
+ * Implementing hook_node_insert
+ * to add new NID to destination GET global variable
+ * 
+ * @param object $node
+ */
+function dnchrm_education_node_insert($node) {
+  $scheme = dnchrm_education_content_type_schema_vars(TRUE, 'formals');
+  if ($node->type == $scheme['content_type']) {
+    $_GET['destination'] .= '/' . $node->nid;
+  }
+}
+
+/**
+ * Convertion person's name to ad available title if any
+ * 
+ * @param integer $person
+ *   NID of the person
+ * 
+ * @return string
+ *   Converted name
+ *   adding title prefix and or suffix if any, 
+ *   or pure person's name if otherwise
+ */
+function dnchrm_education_person_title($person) {
+  $pdata = dncsystem_content_get_data('dnchrm', 'persons', $person);
+  if (empty($pdata[$person]['title'])) {
+    unset ($pdata);
+    return;
+  }
+  $title = $pdata[$person]['title'];
+  unset ($pdata);
+  $items = dnchrm_get_data_by_person($person, 'dnchrm_education', 'academic_titles');
+  if (!empty($items)) {
+    $prefix = array();
+    $suffix = array();
+    foreach ($items as $values) {
+      if (!empty($values['prefix'])) {
+        $prefix[$values['title']] = $values['weight'];
+      }
+      else {
+        $suffix[$values['title']] = $values['weight'];
+      }
+    }
+    if (!empty($prefix)) {
+      asort($prefix);
+      foreach ($prefix as $key => $value) {
+        $title = (isset($comma) ? ', ' : NULL) . $key . ' ' . $title;
+        $comma = 1;
+      }
+      unset ($comma);
+    }
+    if (!empty($suffix)) {
+      asort($suffix);
+      $title .= ', ';
+      foreach ($suffix as $key => $value) {
+        $title .= (isset($comma) ? ', ' : NULL) . $key;
+        $comma = 1;
+      }
+      unset ($comma);
+    }
+    unset ($prefix, $suffix);
+  }
+  unset ($items);
+  return $title;
+}
+

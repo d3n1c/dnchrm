@@ -37,6 +37,17 @@ function dnchrm_family_admin_params(array $form = array(), array $form_state = a
   return $form;
 }
 
+/**
+ * Adding new person's mate data
+ * 
+ * @param array $form
+ * @param array $form_state
+ * @param integer $person
+ *   NID of the person pass via path args
+ * 
+ * @return array
+ *   form array that will be render by drupal_get_form
+ */
 function dnchrm_family_mate_add(array $form = array(), array $form_state = array(), $person = NULL) {
   if (empty($form_state['storage']['person'])) {
     if (empty($person)) {
@@ -52,6 +63,19 @@ function dnchrm_family_mate_add(array $form = array(), array $form_state = array
   return dnchrm_build_add_item_form($form, $form_state);
 }
 
+/**
+ * Listing and manage person's mate and the children
+ * 
+ * @param array $form
+ * @param array $form_state
+ * @param integer $person
+ *   NID of the person
+ * @param integer $mate
+ *   NID of the mate
+ * 
+ * @return array|int
+ *   form array ready to rendering to listing table format
+ */
 function dnchrm_family_mate(array $form = array(), array $form_state = array(), $person, $mate) {
   if (empty($form_state['storage']['person'])) {
     if (empty($person)) {
@@ -126,12 +150,22 @@ function dnchrm_family_mate(array $form = array(), array $form_state = array(), 
     )),
   );
   unset ($data, $children);
+  $form_state['storage']['datatitle'] = 'Family';
   $form_state['storage']['context'] = 'childrens';
   $form_state['storage']['module'] = 'dnchrm_family';
   $form_state['storage']['drupalrender'] = 'teaser';
   return dnchrm_build_tabled_infos_form($form, $form_state);
 }
 
+/**
+ * Implementing hook_submit for listing manage mate's children above
+ * 
+ * @param array $form
+ * @param array $form_state
+ * 
+ * @return string
+ *   execute and redirecting to the current path
+ */
 function dnchrm_family_mate_submit(&$form, &$form_state) {
   form_state_values_clean($form_state);
   $form_state['redirect'] = current_path();
@@ -152,6 +186,16 @@ function dnchrm_family_mate_submit(&$form, &$form_state) {
   drupal_set_message(t('Update childrens have been done successfully :)'));
 }
 
+/**
+ * Handling custom validating to update mate
+ * before it be forwarded to default drupal node update form
+ * 
+ * @param array $form
+ * @param array $form_state
+ * 
+ * @return string
+ *   redirecting to node update
+ */
 function dnchrm_family_update_mate(&$form, &$form_state) {
   form_state_values_clean($form_state);
   drupal_goto('node/' . $form_state['values']['mate'] . '/edit', array(
@@ -162,6 +206,16 @@ function dnchrm_family_update_mate(&$form, &$form_state) {
   return;
 }
 
+/**
+ * Handling custom submit forwarding to delete mate
+ * before it be forwarded to default drupal node delete form
+ * 
+ * @param array $form
+ * @param array $form_state
+ * 
+ * @return string
+ *   redirecting to node delete
+ */
 function dnchrm_family_delete_mate(&$form, &$form_state) {
   form_state_values_clean($form_state);
   drupal_goto('node/' . $form_state['values']['mate'] . '/delete', array(
@@ -172,6 +226,19 @@ function dnchrm_family_delete_mate(&$form, &$form_state) {
   return;
 }
 
+/**
+ * Generating custom action to add children
+ * 
+ * @param array $form
+ * @param array $form_state
+ * @param integer $person
+ *   NID of the person
+ * @param integer $mate
+ *   NID of the person's mate
+ * 
+ * @return array
+ *   form array that ready to render by durpal node form
+ */
 function dnchrm_family_child_add(array $form = array(), array $form_state = array(), $person, $mate) {
   if (empty($form_state['storage']['person'])) {
     if (empty($person)) {
@@ -191,6 +258,10 @@ function dnchrm_family_child_add(array $form = array(), array $form_state = arra
   $form_state['storage']['includefields'] = array('mate' => $form_state['storage']['mate']);
   $form_state['storage']['checkedfields'] = array('gender', 'date_of_birth');
   $form_state['storage']['destination'] = 'dnchrm/family/' . $form_state['storage']['person'] . '/' . $form_state['storage']['mate'];
+  $data = dncsystem_content_get_data('dnchrm_family', 'mates', $mate, 'title');
+  $data = empty($data[$mate]['title']) ? t('mate') : $data[$mate]['title'];
+  $form_state['storage']['pagetitle'] = t('Add child of @mate', array('@mate' => $data));
+  unset ($data);
   
   return dnchrm_build_add_item_form($form, $form_state);
 }

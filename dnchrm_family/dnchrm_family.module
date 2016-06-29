@@ -101,8 +101,8 @@ function dnchrm_family_menu() {
  */
 function dnchrm_family_content_type_schema_vars($localConvert = FALSE, $field = NULL, $justinfos = FALSE) {
   $source = array(
-    'mates' => array('title', 'person', 'gender', 'date_of_birth', 'legal_basis', 'attachments'),
-    'childrens' => array('title', 'person', 'mate', 'gender', 'date_of_birth', 'legal_basis', 'attachments'),
+    'mates' => array('title', 'person', 'gender', 'date_of_birth', 'legal_basis', 'attachments', 'picture'),
+    'childrens' => array('title', 'person', 'mate', 'gender', 'date_of_birth', 'legal_basis', 'attachments', 'picture'),
   );
   if ($localConvert !== FALSE) {
     $source = dncctypevars_get_ctype_scheme_vars('dnchrm_family', $source);
@@ -185,7 +185,12 @@ function dnchrm_family_listing(array $form = array(), array $form_state = array(
       $mates .= '</ul>';
     }
     else {
-      $mates = '<strong>+</strong> ' . l(t('Add One'), 'dnchrm/family-mate/add/' . $data['nid']);
+      if (!user_access('use dnc hrm')) {
+        $mates = t('Not available yet');
+      }
+      else {
+        $mates = '<strong>+</strong> ' . l(t('Add One'), 'dnchrm/family-mate/add/' . $data['nid']);
+      }
     }
     unset ($dump);
     $rows['mate'] = array(
