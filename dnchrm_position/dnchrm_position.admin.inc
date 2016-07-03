@@ -1,43 +1,64 @@
 <?php
 
-/* 
- * Copyright (C) 2016 denic wibowo
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- */
-
 /**
  * @file
- * Module to handle types of rank reference of human resource management
+ * Handling administration action in the system
  * 
- * Handling types of rank reference to handle management of human resources
+ * All configuration processing will be handled
+ * by this module
  */
 
 /**
- * Building form to manage types of rank references
+ * Configure position data of HRM system parameters
+ * 
+ * @param array $form
+ *   variable arry of form
+ * @param array $form_state
+ *   variable array of form_state
+ * 
+ * @return array
+ *   form array that will rendered by drupal_get_form
+ */
+function dnchrm_position_admin_params(array $form = array(), array $form_state = array()) {
+  $info = dnchrm_position_content_type_schema_vars(FALSE, NULL, TRUE);
+  $form['content types'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('Content Types'),
+    '#description' => t('Main content type that be used in this system'),
+    '#collapsible' => TRUE,
+    '#collapsed' => TRUE,
+    '#weight' => 0,
+  );
+  $form['content types']['scheme'] = array(
+    '#markup' => $info,
+  );
+  unset ($info);
+  
+  $form['dnchrm_position_level_max'] = array(
+    '#type' => 'textfield',
+    '#size' => 5,
+    '#title' => t('Level Maximum'),
+    '#description' => t('Maximum amount of available organization structure\'s levels'),
+    '#required' => TRUE,
+    '#default_value' => variable_get('dnchrm_position_level_max', 3),
+  );
+  
+  return system_settings_form($form);
+}
+
+/**
+ * Building form to manage position references
  * 
  * @param array $form
  * @param array $form_state
  * @param string $filter
  *   argument extra to limit operation in certain effective date
- *   and structural boolean if any
  * 
  * @return array
  *   form array
  */
-function dnchrm_rank_types_of_rank_references(array $form = array(), array $form_state = array(), $filter = NULL) {
-  $scheme = dnchrm_rank_content_type_schema_vars(TRUE, 'types_of_rank');
+function dnchrm_position_listing(array $form = array(), array $form_state = array(), $effective_date = NULL) {
+  $scheme = dnchrm_position_content_type_schema_vars(TRUE, 'positions');
   if (empty($scheme['content_type'])) {
     unset ($scheme);
     drupal_set_message(t('Wrong scheme parameters :('), 'error', FALSE);
@@ -46,11 +67,10 @@ function dnchrm_rank_types_of_rank_references(array $form = array(), array $form
   $nodetype = node_type_get_type($scheme['content_type']);
   
   if (empty($form_state['storage']['effective_date'])) {
-    if (empty($_GET['filter']) && empty($filter)) {
+    if (empty($_GET['effective_date']) && empty($effective_date)) {
       $form['effective_date'] = array();
-      $form['structural_boolean'] = array();
       foreach ($scheme['fields'] as $keys => $values) {
-        if (in_array($keys, array('effective_date', 'structural_boolean'))) {
+        if (in_array($keys, array('effective_date'))) {
           if ($values == 'title') {
             $form[$keys]['#title'] = $nodetype->title_label;
             $form[$keys]['#type'] = 'textfield';
@@ -115,53 +135,32 @@ function dnchrm_rank_types_of_rank_references(array $form = array(), array $form
       $form['setdate'] = array(
         '#type' => 'submit',
         '#value' => t('set'),
-        '#submit' => array('dnchrm_rank_types_of_rank_references_set_date'),
+        '#submit' => array('dnchrm_position_references_set_date'),
         '#weight' => 100,
       );
       return $form;
     }
     else {
-      if (empty($filter)) {
-        if (empty($_GET['filter'])) {
+      if (empty($effective_date)) {
+        if (empty($_GET['effective_date'])) {
           drupal_set_message(t('No effective date info available :('), 'error', FALSE);
           return $form;
         }
-        $filter = $_GET['filter'];
+        $effective_date = $_GET['effective_date'];
       }
-      $filter = dncsystem_unserialize(base64_decode(urldecode($filter)));
-      $checkdate = empty($filter['effective_date']) ? FALSE : dncsystem_check_invalid_date($filter['effective_date']);
-      if (empty($filter['effective_date']) || empty($checkdate)) {
-        unset ($filter);
+      $checkdate = empty($effective_date) ? FALSE : dncsystem_check_invalid_date($effective_date);
+      if (empty($effective_date) || empty($checkdate)) {
+        unset ($effective_date, $checkdate);
         drupal_set_message(t('No effective date info available :('), 'error', FALSE);
         return $form;
       }
       unset ($checkdate);
-      $form_state['storage']['effective_date'] = $filter['effective_date'];
-      if (!empty($filter['structural_boolean'])) {
-        $form_state['storage']['structural_boolean'] = $filter['structural_boolean'];
-      }
-      unset ($filter);
+      $form_state['storage']['effective_date'] = $effective_date;
+      unset ($effective_date);
     }
   }
   
-  return dnchrm_rank_types_of_rank_references_form($form, $form_state);
-}
-
-/**
- * Submit action of reference effective data choosing
- * 
- * @param array $form
- * @param array $form_state
- */
-function dnchrm_rank_types_of_rank_references_set_date(&$form, &$form_state) {
-  form_state_values_clean($form_state);
-  $form_state['rebuild'] = TRUE;
-  $scheme = dnchrm_rank_content_type_schema_vars(TRUE, 'types_of_rank');
-  foreach ($form_state['values'] as $keys => $values) {
-    if (!empty($values) && !empty($scheme['fields'][$keys])) {
-      $form_state['storage'][$keys] = $values;
-    }
-  }
+  return dnchrm_position_references_form($form, $form_state);
 }
 
 /**
@@ -170,21 +169,57 @@ function dnchrm_rank_types_of_rank_references_set_date(&$form, &$form_state) {
  * @param array $form
  * @param array $form_state
  */
-function dnchrm_rank_types_of_rank_references_submit(&$form, &$form_state) {
-  dnchrm_rank_types_of_rank_references_form_submit($form, $form_state);
-  $filter = array(
-    'effective_date' => $form_state['values']['effective_date'],
-  );
-  if (!empty($form_state['values']['structural_boolean'])) {
-    $filter['structural_boolean'] = $form_state['values']['structural_boolean'];
-  }
-  $filter = urlencode(base64_encode(serialize($filter)));
+function dnchrm_position_listing_submit(&$form, &$form_state) {
+  dnchrm_position_references_form_submit($form, $form_state);
+  $effective_date = $form_state['values']['effective_date'];
   $form_state['redirect'] = array(current_path(), array(
     'query' => array(
-      'filter' => $filter
+      'effective_date' => $effective_date
     )
   ));
-  unset ($filter);
-  drupal_set_message(t('Types of rank have been saved :)'));
+  unset ($effective_date);
+  drupal_set_message(t('Positions have been saved :)'));
 }
 
+/**
+ * Submit action of reference effective data choosing
+ * 
+ * @param array $form
+ * @param array $form_state
+ */
+function dnchrm_position_references_set_date(&$form, &$form_state) {
+  form_state_values_clean($form_state);
+  $form_state['rebuild'] = TRUE;
+  $scheme = dnchrm_position_content_type_schema_vars(TRUE, 'positions');
+  foreach ($form_state['values'] as $keys => $values) {
+    if (!empty($values) && !empty($scheme['fields'][$keys])) {
+      $form_state['storage'][$keys] = $values;
+    }
+  }
+}
+
+/**
+ * Produce popup form to manage position
+ * 
+ * @param string $js
+ */
+function dnchrm_position_manage_position_popup($js = NULL, $effective_date) {
+  // degrade half-assed to no js
+  if(!$js) {
+    return drupal_get_form('dnchrm_position_references_form', $effective_date);
+  }
+  
+  // adelante!
+  ctools_include('modal');
+  ctools_include('ajax');
+  $form_state['title'] = t('Manage Position');
+  $form_state['ajax'] = TRUE;
+  $form_state['storage']['effective_date'] = $effective_date;
+  $output = ctools_modal_form_wrapper('dnchrm_position_references_form', $form_state);
+  if (!empty($form_state['executed'])) {
+    $output = array();
+    $output[] = ctools_modal_command_dismiss(t('Success!'));
+    $output[] = ctools_ajax_command_reload();
+  }
+  print ajax_render($output);
+}

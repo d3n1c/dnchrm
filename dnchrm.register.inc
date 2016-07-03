@@ -98,3 +98,75 @@ function dnchrm_bio_register_add(array $form = array(), array $form_state = arra
   return dnchrm_build_add_item_form($form, $form_state);
 }
 
+/**
+ * Getting person's register ID
+ * 
+ * @param int $person
+ *   NID of the person
+ * @param boolean $all
+ *   TRUE will return all data, FALSE will return the new one only
+ *   default to FALSE
+ * 
+ * @return string|array
+ *   return string if found only one info, array if more, and NULL if
+ *   nothing data found
+ */
+function dnchrm_register_get_by_person($person, $all = FALSE) {
+  $scheme = dnchrm_content_type_schema_vars(TRUE, 'registers');
+  if (empty($scheme['content_type'])) {
+    unset($scheme);
+    return;
+  }
+  
+  $query = new EntityFieldQuery();
+  $query->entityCondition('entity_type', 'node');
+  $query->entityCondition('bundle', $scheme['content_type']);
+  $query->propertyCondition('status', NODE_PUBLISHED);
+  $query->addMetaData('account', user_load(1));
+  foreach ($scheme['fields'] as $keys => $values) {
+    if (in_array($keys, array('person', 'effective_date'))) {
+      if ($values == 'title') {
+        if ($keys == 'person') {
+          $query->propertyCondition('title', $person);
+        }
+        else {
+          $query->propertyOrderBy('title', 'DESC');
+        }
+      }
+      else {
+        $finfo = field_info_field($values);
+        $column = isset($finfo['columns']['target_id']) ? 'target_id' : 'value';
+        if ($keys == 'person') {
+          $query->fieldCondition($values, $column, $person);
+        }
+        else {
+          $query->fieldOrderBy($values, $column, 'DESC');
+        }
+        unset ($column, $finfo);
+      }
+    }
+  }
+  if (empty($all)) {
+    $query->range(0, 1);
+  }
+  $result = $query->execute();
+  unset ($query);
+  if (empty($result['node'])) {
+    unset ($result, $scheme);
+    return;
+  }
+  $nodes = node_load_multiple(array_keys($result['node']));
+  unset ($result);
+  $return = array();
+  foreach ($nodes as $node) {
+    if (empty($all)) {
+      $return = dncsystem_retrieve_node_data($scheme, $node, 'title');
+    }
+    else {
+      $return[$node->nid] = dncsystem_retrieve_node_data($scheme, $node, 'title');
+    }
+  }
+  unset ($scheme, $node, $nodes);
+  return $return;
+}
+

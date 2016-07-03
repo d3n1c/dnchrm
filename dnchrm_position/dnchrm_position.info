@@ -1,0 +1,8 @@
+name = "DNC HRM Position"
+description = "DNC's system to manage position data of HRM"
+core = 7.x
+package = DNC System
+dependencies[] = dncsystem
+dependencies[] = dncctypevars
+dependencies[] = dnchrm
+configure = admin/config/dncsystem/dnchrm/position

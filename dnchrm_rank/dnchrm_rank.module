@@ -333,7 +333,7 @@ function dnchrm_rank_form_node_form_alter(&$form, &$form_state, $form_id) {
  *   flag whether request structural type or not
  * 
  * @return array
- *   List of the available types if founde, or NULL if otherwise
+ *   List of the available types if found, or NULL if otherwise
  */
 function dnchrm_rank_get_types_of_rank($effective_date, $structural = TRUE, $all = FALSE) {
   $scheme = dnchrm_rank_content_type_schema_vars(TRUE, 'types_of_rank');
@@ -447,97 +447,6 @@ function dnchrm_rank_type_of_rank_alloweds($structural = TRUE) {
     unset ($sorting, $used);
   }
   unset ($dump, $checkdate);
-  return $return;
-}
-
-/**
- * Generating elements for theme table in the form
- * that used to edit or just listing information
- * 
- * @param string $itemkey
- *   key of the item
- * @param array $scheme
- *   scheme use to referenced
- * @param array $field
- *   array of targeted field, source key to get the script key,
- *   value to get the drupal field that be used in the targeted content type
- * @param string $default
- *   default value if any, or leave blank if value nothing
- * 
- * @return array
- *   form array that included in parent to be rendered by drupal get form
- */
-function dnchrm_rank_produce_table_theme_elements($itemkey, $scheme, array $field = array(), $default = NULL) {
-  if (empty($scheme['fields']) ||
-          empty($field) ||
-          empty($scheme['fields'][$field['source']])) {
-    return;
-  }
-  
-  $return = array(
-    '#id' => 'item-' . $itemkey . '-' . str_replace('_', '-', $field['source'])
-  );
-  if (!user_access('use dnc hrm')) {
-    $return['#type'] = 'item';
-    $return['#markup'] = empty($default) ? NULL : $default;
-  }
-  else {
-    $return['#name'] = 'tor[' . $itemkey . '][' . $field['source'] . ']';
-    $return['#default_value'] = empty($default) ? NULL : $default;
-    if ($field['value'] == 'title') {
-      $return['#type'] = 'textfield';
-      $return['#size'] = 40;
-    }
-    else {
-      $instance = field_info_instance('node', $field['value'], $scheme['content_type']);
-      $finfo = field_info_field($field['value']);
-      if ($instance['widget']['type'] == 'date_popup') {
-        $return['#type'] = 'date_popup';
-        foreach ($instance['widget']['settings'] as $ky => $vl) {
-          if (!empty($vl)) {
-            $ky = '#date_' . preg_replace('/^input_/', '', $ky);
-            if ($ky == '#date_format') {
-              $vl = dncsystem_granularity_to_date_format($finfo['settings']['granularity']);
-            }
-            $return[$ky] = $vl;
-          }
-        }
-      }
-      elseif($instance['widget']['type'] == 'options_onoff') {
-        $return['#type'] = 'checkbox';
-      }
-      elseif (preg_match('/^list/', $finfo['type'])) {
-        $return['#type'] = 'select';
-        $return['#options'] = $finfo['settings']['allowed_values'];
-      }
-      elseif ($finfo['type'] == 'entityreference') {
-        $options = array();
-        $conditions = array();
-        foreach ($finfo['settings']['handler_settings']['target_bundles'] as $vl) {
-          if (!empty($vl)) {
-            $conditions['type'][] = $vl;
-          }
-        }
-        $dump = entity_load($finfo['settings']['target_type'], FALSE, array('type' => $conditions));
-        unset ($conditions);
-        if (!empty($dump)) {
-          foreach ($dump as $node) {
-            $options[$node->nid] = $node->title;
-          }
-        }
-        unset ($dump);
-        $return['#type'] = 'select';
-        $return['#options'] = $options;
-        unset ($options);
-      }
-      else {
-        $return['#type'] = 'textfield';
-        $return['#size'] = empty($instance['widget']['settings']['size']) ? ($field['source'] == 'level' ? 5 : 40) : $instance['widget']['settings']['size'];
-        $return['#maxlength'] = empty($finfo['settings']['max_length']) ? 255 : $finfo['settings']['max_length'];
-      }
-      unset ($finfo, $instance);
-    }
-  }
   return $return;
 }
 
@@ -670,11 +579,21 @@ function dnchrm_rank_types_of_rank_references_form(array $form = array(), array 
     foreach ($scheme['fields'] as $keys => $values) {
       if (!in_array($keys, array('effective_date', 'structural_boolean'))) {
         if ($values == 'title') {
-          $form['ctable']['#header'][] = array('data' => $nodetype->title_label);
+          $form['ctable']['#header'][] = array(
+            'data' => $nodetype->title_label . (
+              user_access('use dnc hrm') ? '*' : NULL
+            )
+          );
         }
         else {
           $instance = field_info_instance('node', $values, $scheme['content_type']);
-          $form['ctable']['#header'][] = array('data' => $instance['label']);
+          $form['ctable']['#header'][] = array(
+            'data' => $instance['label'] . (
+            user_access('use dnc hrm') ? (
+                empty($instance['required']) ? NULL : '*'
+              ) : NULL
+            )
+          );
           unset ($instance);
         }
       }
@@ -694,7 +613,7 @@ function dnchrm_rank_types_of_rank_references_form(array $form = array(), array 
               'source' => $key,
               'value' => $value,
             );
-            ${$key} = dnchrm_rank_produce_table_theme_elements($keys, $scheme, $field, $values[$key]);
+            ${$key} = dnchrm_produce_table_theme_elements($keys, $scheme, $field, $values[$key]);
             unset ($field);
             $form['ctable'][$i - 1][$key] = &${$key};
             $form['ctable']['#rows'][$i - 1][] = array(
@@ -730,7 +649,7 @@ function dnchrm_rank_types_of_rank_references_form(array $form = array(), array 
           'source' => $key,
           'value' => $value,
         );
-        ${$key} = dnchrm_rank_produce_table_theme_elements('new', $scheme, $field);
+        ${$key} = dnchrm_produce_table_theme_elements('new', $scheme, $field);
         unset ($field);
         $form['ctable'][$i - 1][$key] = &${$key};
         $form['ctable']['#rows'][$i - 1][] = array(
@@ -752,6 +671,11 @@ function dnchrm_rank_types_of_rank_references_form(array $form = array(), array 
     );
     unset ($delete);
     
+    $form['footerinfos'] = array(
+      '#type' => 'item',
+      '#markup' => t('<strong>Annotation</strong>: the "*" sign is required elements!'),
+      '#weight' => 100,
+    );
     $form['submit'] = array(
       '#type' => 'submit',
       '#value' => t('save'),
@@ -776,6 +700,7 @@ function dnchrm_rank_types_of_rank_references_form_submit(&$form, &$form_state) 
   }
   if (!empty($form_state['input']['tor']) &&
         !empty($form_state['values']['effective_date'])) {
+    $scheme = dnchrm_rank_content_type_schema_vars(TRUE, 'types_of_rank');
     foreach ($form_state['input']['tor'] as $keys => $values) {
       if (!empty($values['delete'])) {
         // delete action here;
@@ -826,6 +751,24 @@ function dnchrm_rank_types_of_rank_references_form_submit(&$form, &$form_state) 
             }
             unset ($check);
           }
+          foreach ($scheme['fields'] as $key => $value) {
+            if ($value == 'title') {
+              if (empty($new['title'])) {
+                unset ($new);
+                break;
+              }
+            }
+            else {
+              $instance = field_info_instance('node', $value, $scheme['content_type']);
+              if ($instance['required']) {
+                if (empty($new[$key])) {
+                  unset ($new, $instance);
+                  break;
+                }
+              }
+              unset ($instance);
+            }
+          }
           if (!empty($new)) {
             $force = empty($force) ? FALSE : TRUE;
             dncsystem_content_update_data('dnchrm_rank', 'types_of_rank', $new, $force);
@@ -834,6 +777,7 @@ function dnchrm_rank_types_of_rank_references_form_submit(&$form, &$form_state) 
         }
       }
     }
+    unset ($scheme);
   }
 }
 

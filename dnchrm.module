@@ -410,11 +410,15 @@ function dnchrm_get_data_by_person($person, $module, $context, $field = NULL, $r
   $nodes = node_load_multiple(array_keys($result['node']));
   unset ($result);
   $return = array();
+  $first = NULL;
   foreach ($nodes as $node) {
+    if (empty($first)) {
+      $first = $node->nid;
+    }
     $return[$node->nid] = dncsystem_retrieve_node_data($scheme, $node, $field, $render);
   }
   unset($scheme, $node, $nodes);
-  return $return;
+  return empty($field) || count($field) > 1 ? $return : (!empty($first) ? $return[$first] : $return);
 }
 
 /**
@@ -1364,5 +1368,109 @@ function dnchrm_form_node_form_alter(&$form, &$form_state, $form_id) {
     }
   }
   unset ($scheme);
+}
+
+/**
+ * Generating elements for theme table in the form
+ * that used to edit or just listing information
+ * 
+ * @param string $itemkey
+ *   key of the item
+ * @param array $scheme
+ *   scheme use to referenced
+ * @param array $field
+ *   array of targeted field, source key to get the script key,
+ *   value to get the drupal field that be used in the targeted content type
+ * @param string $default
+ *   default value if any, or leave blank if value nothing
+ * 
+ * @return array
+ *   form array that included in parent to be rendered by drupal get form
+ */
+function dnchrm_produce_table_theme_elements($itemkey, $scheme, array $field = array(), $default = NULL) {
+  if (empty($scheme['fields']) ||
+          empty($field) ||
+          empty($scheme['fields'][$field['source']])) {
+    return;
+  }
+  
+  $return = array(
+    '#id' => 'item-' . $itemkey . '-' . str_replace('_', '-', $field['source'])
+  );
+  if (!user_access('use dnc hrm')) {
+    $return['#type'] = 'item';
+    $return['#markup'] = empty($default) ? NULL : $default;
+  }
+  else {
+    $return['#name'] = 'tor[' . $itemkey . '][' . $field['source'] . ']';
+    $return['#default_value'] = empty($default) ? NULL : $default;
+    if ($field['value'] == 'title') {
+      $return['#type'] = 'textfield';
+      $return['#size'] = empty($field['size']) ? 40 : $field['size'];
+    }
+    else {
+      $instance = field_info_instance('node', $field['value'], $scheme['content_type']);
+      $finfo = field_info_field($field['value']);
+      if (!empty($field['typealter'])) {
+        foreach ($field['typealter'] as $keys => $values) {
+          $return[$keys] = $values;
+        }
+      }
+      elseif ($instance['widget']['type'] == 'date_popup') {
+        $return['#type'] = 'date_popup';
+        foreach ($instance['widget']['settings'] as $ky => $vl) {
+          if (!empty($vl)) {
+            $ky = '#date_' . preg_replace('/^input_/', '', $ky);
+            if ($ky == '#date_format') {
+              $vl = dncsystem_granularity_to_date_format($finfo['settings']['granularity']);
+            }
+            $return[$ky] = $vl;
+          }
+        }
+      }
+      elseif($instance['widget']['type'] == 'options_onoff') {
+        $return['#type'] = 'checkbox';
+      }
+      elseif (preg_match('/^list/', $finfo['type'])) {
+        $return['#type'] = 'select';
+        $return['#options'] = $finfo['settings']['allowed_values'];
+      }
+      elseif ($finfo['type'] == 'entityreference') {
+        $options = array();
+        if (empty($instance['required'])) {
+          $options[NULL] = '- ' . t('none') . ' -';
+        }
+        $conditions = array();
+        foreach ($finfo['settings']['handler_settings']['target_bundles'] as $vl) {
+          if (!empty($vl)) {
+            $conditions['type'][] = $vl;
+          }
+        }
+        if (!empty($field['customfunct']) && isset($field['customargs']) && function_exists($field['customfunct'])) {
+          $dump = $field['customfunct']($field['customargs']);
+        }
+        else {
+          $dump = entity_load($finfo['settings']['target_type'], FALSE, array('type' => $conditions));
+        }
+        unset ($conditions);
+        if (!empty($dump)) {
+          foreach ($dump as $node) {
+            $options[$node->nid] = $node->title;
+          }
+        }
+        unset ($dump);
+        $return['#type'] = 'select';
+        $return['#options'] = $options;
+        unset ($options);
+      }
+      else {
+        $return['#type'] = 'textfield';
+        $return['#size'] = empty($instance['widget']['settings']['size']) ? ($instance['widget']['type'] == 'number' ? 5 : (empty($field['size']) ? 40 : $field['size'])) : $instance['widget']['settings']['size'];
+        $return['#maxlength'] = empty($finfo['settings']['max_length']) ? 255 : $finfo['settings']['max_length'];
+      }
+      unset ($finfo, $instance);
+    }
+  }
+  return $return;
 }
 

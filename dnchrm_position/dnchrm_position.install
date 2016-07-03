@@ -1,0 +1,15 @@
+<?php
+
+/**
+ * @file
+ * Install, update and uninstall functions for the module.
+ */
+
+/**
+ * Implements hook_install().
+ */
+function dnchrm_position_uninstall() {
+  variable_del('dnchrm_position_content_types');
+  variable_del('dnchrm_position_level_max');
+}
+

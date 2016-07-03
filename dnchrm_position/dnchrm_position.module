@@ -1,0 +1,824 @@
+<?php
+
+/* 
+ * Copyright (C) 2016 denic wibowo
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
+/**
+ * @file
+ * Module to handle position of human resource management
+ * 
+ * Handling positions data of management of human resources
+ */
+
+/**
+ * Implementation of hook_load
+ * @return arg
+ **/
+function dnchrm_position_load($arg) {
+  return check_plain($arg);
+}
+
+/**
+ * Implementation of hook_menu
+ * 
+ * @return array
+ */
+function dnchrm_position_menu() {
+  $items = array();
+  $items['admin/config/dncsystem/dnchrm/position'] = array(
+    'title' => 'Position Params',
+    'description' => 'Position parameters and configurations',
+    'access arguments' => array('administer site configuration'),
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('dnchrm_position_admin_params'),
+    'file' => 'dnchrm_position.admin.inc',
+  );
+  $items['dnchrm/structure'] = array(
+    'title' => 'Organization Structure',
+    'description' => 'Structure of the organization information',
+    'access arguments' => array('view dnc hrm'),
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('dnchrm_position_structure'),
+    'type' => MENU_NORMAL_ITEM,
+    'file' => 'dnchrm_position.structure.inc',
+  );
+  $items['dnchrm/structure/position'] = array(
+    'title' => 'Position Data',
+    'description' => 'Position data information',
+    'access arguments' => array('view dnc hrm'),
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('dnchrm_position_listing'),
+    'type' => MENU_NORMAL_ITEM,
+    'file' => 'dnchrm_position.admin.inc',
+  );
+  $items['dnchrm/structure/%dnchrm_position/%'] = array(
+    'title' => 'Position Allocation',
+    'description' => 'Allocating employee to available position',
+    'access arguments' => array('view dnc hrm'),
+    'page callback' => 'dnchrm_position_structure_allocate',
+    'page arguments' => array(2, 3),
+    'type' => MENU_VISIBLE_IN_BREADCRUMB,
+    'file' => 'dnchrm_position.structure.inc',
+  );
+  $items['dnchrm-structure/%ctools_js/form/setposition/%dnchrm_position'] = array(
+    'title' => 'Manage Position',
+    'description' => 'Managing position',
+    'page callback' => 'dnchrm_position_manage_position_popup',
+    'page arguments' => array(1, 4),
+    'access arguments' => array('use dnc hrm'),
+    'type' => MENU_CALLBACK,
+    'file' => 'dnchrm_position.admin.inc',
+  );
+  
+  return $items;
+}
+
+/**
+ * Get content type scheme that be used in the system
+ * It can be source of the script or result from converting action
+ * 
+ * @param boolean $localConvert
+ *   True will get the result convert, or false for the source
+ * @param array $field
+ *   Source field name, can be array, string or NULL
+ *   This param will limit the output result on given field name
+ * 
+ * @return array
+ *   Resulting scheme of source or convert result
+ */
+function dnchrm_position_content_type_schema_vars($localConvert = FALSE, $field = NULL, $justinfos = FALSE) {
+  $source = array(
+    'positions' => array('title', 'the_length', 'level', 'effective_date', 'parent_position', 'count', 'weight'),
+    'positions_of_employee' => array('title', 'position', 'person', 'effective_date', 'legal_basis', 'attachments'),
+  );
+  if ($localConvert !== FALSE) {
+    $source = dncctypevars_get_ctype_scheme_vars('dnchrm_position', $source);
+  }
+  else {
+    if ($justinfos !== FALSE) {
+      $source = dncctypevars_get_scheme_infos('dnchrm_position', $source);
+    }
+  }
+  return empty($field) ? $source : (empty($source[$field]) ? NULL : $source[$field]);
+}
+
+/**
+ * Implementing hook_form_node_form_alter
+ * to embeded some information and popup link form
+ * and add integrity data person in some content type
+ * 
+ * @param array $form
+ * @param array $form_state
+ * @param string $form_id
+ * 
+ * @return array
+ */
+function dnchrm_position_form_node_form_alter(&$form, &$form_state, $form_id) {
+  $scheme = dnchrm_position_content_type_schema_vars(TRUE);
+  foreach ($scheme as $keys => $values) {
+    if ($form['#node']->type == $values['content_type']) {
+      if (!user_access('use dnc hrm')) {
+        drupal_set_message(t('Sorry you unauthorized :('), 'error', FALSE);
+        drupal_goto('dnchrm/bio');
+        return;
+      }
+      if ($keys == 'positions') {
+        drupal_set_message(t('Use this menu please!'), 'warning', FALSE);
+        drupal_goto('dnchrm/position');
+        return;
+      }
+      if ($keys == 'positions_of_employee') {
+        foreach ($values['fields'] as $key => $value) {
+          if ($key == 'position') {
+            if (empty($form['#node']->{$value}[$form[$value]['#language']])) {
+              drupal_set_message(t('Please use this menu to update this content type'), 'error', FALSE);
+              drupal_goto('dnchrm/structure');
+              return;
+            }
+            $form[$value][$form[$value]['#language']]['#type'] = 'hidden';
+          }
+          elseif($key == 'effective_date') {
+            $form[$value][$form[$value]['#language']][0]['#type'] = 'hidden';
+            unset ($form[$value][$form[$value]['#language']]['#theme']);
+            unset ($form[$value][$form[$value]['#language']][0]['#theme_wrappers']);
+          }
+          elseif($value == 'title') {
+            if (!empty($form['#node']->title)) {
+              $form[$value]['#attributes'] = array('readonly' => TRUE);
+            }
+          }
+        }
+//        echo '<pre>'; print_r($form[$values['fields']['effective_date']]); echo '</pre>'; exit;
+      }
+    }
+  }
+  unset ($scheme);
+}
+
+/**
+ * Generating position references form that used in
+ * various path, so it give flexibilities
+ * 
+ * @param array $form
+ * @param array $form_state
+ * 
+ * @return string|array
+ *   form array of the creation, update and deletion
+ *   types of rank information
+ */
+function dnchrm_position_references_form(array $form = array(), array $form_state = array()) {
+  $scheme = dnchrm_position_content_type_schema_vars(TRUE, 'positions');
+  if (empty($scheme['content_type'])) {
+    unset ($scheme);
+    drupal_set_message(t('Wrong scheme parameters :('), 'error', FALSE);
+    return $form;
+  }
+  $nodetype = node_type_get_type($scheme['content_type']);
+  
+  if (empty($form_state['storage']['effective_date'])) {
+    drupal_set_message(t('No effective date info available :('), 'error', FALSE);
+    return $form;
+  }
+  
+  if (!empty($form_state['storage'])) {
+    foreach ($form_state['storage'] as $keys => $values) {
+      $form[$keys] = array(
+        '#type' => 'value',
+        '#value' => $values,
+      );
+    }
+  }
+  
+  foreach ($scheme['fields'] as $keys => $values) {
+    if (in_array($keys, array('effective_date'))) {
+      $markup = dncsystem_date('l, j F Y', strtotime($form_state['storage'][$keys]));
+      $form['v_' . $keys]['#type'] = 'item';
+      $form['v_' . $keys]['#markup'] = ': ' . $markup;
+      $form['v_' . $keys]['#prefix'] = '<div class="container-inline">';
+      $form['v_' . $keys]['#suffix'] = '</div>';
+      if ($values == 'title') {
+        $form['v_' . $keys]['#title'] = $nodetype->title_label;
+      }
+      else {
+        $instance = field_info_instance('node', $values, $scheme['content_type']);
+        $form['v_' . $keys]['#title'] = $instance['label'];
+        unset ($instance);
+      }
+    }
+  }
+  
+  $data = dnchrm_position_get_positions($form_state['storage']['effective_date']);
+  if (!empty($data) || user_access('use dnc hrm')) {
+    $form['ctable'] = array(
+      '#theme' => 'table',
+      '#header' => array(),
+      '#rows' => array(),
+    );
+    foreach ($scheme['fields'] as $keys => $values) {
+      if (!in_array($keys, array('effective_date'))) {
+        if ($values == 'title') {
+          $form['ctable']['#header'][] = array(
+            'data' => $nodetype->title_label . (
+              user_access('use dnc hrm') ? '*' : NULL
+            )
+          );
+        }
+        else {
+          $instance = field_info_instance('node', $values, $scheme['content_type']);
+          $form['ctable']['#header'][] = array(
+            'data' => $instance['label'] . (
+            user_access('use dnc hrm') ? (
+                empty($instance['required']) ? NULL : '*'
+              ) : NULL
+            )
+          );
+          unset ($instance);
+        }
+      }
+    }
+    if (user_access('use dnc hrm')) {
+      $form['ctable']['#header'][] = array('data' => t('Delete'));
+    }
+  }
+  if (!empty($data)) {
+    $i = 0;
+    foreach ($data as $keys => $values) {
+      $i++;
+      foreach ($scheme['fields'] as $key => $value) {
+        if (!in_array($key, array('effective_date'))) {
+          $field = array(
+            'source' => $key,
+            'value' => $value,
+          );
+          if ($key == 'title') {
+            $field['size'] = 20;
+          }
+          elseif($key == 'level') {
+            $options = array();
+            for($u = 1; $u <= variable_get('dnchrm_position_level_max', 3); $u++) {
+              $options[$u] = $u;
+            }
+            $field['typealter'] = array(
+              '#type' => 'select',
+              '#options' => $options,
+            );
+            unset ($options, $u);
+          }
+          elseif($key == 'parent_position') {
+            $field['customfunct'] = 'dnchrm_position_get_parent_positions';
+            $field['customargs'] = array(
+              'level' => $values['level'],
+              'effective_date' => $form_state['storage']['effective_date'],
+            );
+          }
+          $dval = empty($values[$key]) ? NULL : $values[$key];
+          ${$key} = dnchrm_produce_table_theme_elements($keys, $scheme, $field, $dval);
+          unset ($field, $dval);
+          $form['ctable'][$i - 1][$key] = &${$key};
+          $form['ctable']['#rows'][$i - 1][] = array(
+            'data' => &${$key},
+            'style' => 'vertical-align: top;',
+          );
+          unset (${$key});
+        }
+      }
+      if (user_access('use dnc hrm')) {
+        $delete = array(
+          '#id' => 'item-' . $keys . '-delete',
+          '#name' => 'tor[' . $keys . '][delete]',
+          '#type' => 'checkbox',
+          '#title' => t('delete'),
+        );
+        $form['ctable'][$i - 1]['delete'] = &$delete;
+        $form['ctable']['#rows'][$i - 1][] = array(
+          'data' => &$delete,
+          'style' => 'vertical-align: top;',
+        );
+        unset ($delete);
+      }
+    }
+  }
+  unset ($data);
+  if (user_access('use dnc hrm')) {
+    $i = empty($i) ? 0 : $i;
+    $i++;
+    foreach ($scheme['fields'] as $key => $value) {
+      if (!in_array($key, array('effective_date'))) {
+        $field = array(
+          'source' => $key,
+          'value' => $value,
+        );
+        if ($key == 'title') {
+          $field['size'] = 20;
+        }
+        elseif($key == 'level') {
+          $options = array();
+          for($u = 1; $u <= variable_get('dnchrm_position_level_max', 3); $u++) {
+            $options[$u] = $u;
+          }
+          $field['typealter'] = array(
+            '#type' => 'select',
+            '#options' => $options,
+          );
+          unset ($options, $u);
+        }
+        ${$key} = dnchrm_produce_table_theme_elements('new', $scheme, $field);
+        unset ($field);
+        $form['ctable'][$i - 1][$key] = &${$key};
+        $form['ctable']['#rows'][$i - 1][] = array(
+          'data' => &${$key},
+          'style' => 'vertical-align: top;',
+        );
+        unset (${$key});
+      }
+    }
+    $delete = array(
+      '#id' => 'tor-new-delete',
+      '#type' => 'item',
+      '#markup' => t('new'),
+    );
+    $form['ctable'][$i - 1]['delete'] = &$delete;
+    $form['ctable']['#rows'][$i - 1][] = array(
+      'data' => &$delete,
+      'style' => 'vertical-align: top;',
+    );
+    unset ($delete);
+    
+    $form['footerinfos'] = array(
+      '#type' => 'item',
+      '#markup' => t('<strong>Annotation</strong>: the "*" sign is required elements!'),
+      '#weight' => 100,
+    );
+    $form['submit'] = array(
+      '#type' => 'submit',
+      '#value' => t('save'),
+      '#weight' => 200,
+    );
+  }
+  unset ($i);
+  
+  return $form;
+}
+
+/**
+ * Execution action for types of rank references form
+ * 
+ * @param array $form
+ * @param array $form_state
+ */
+function dnchrm_position_references_form_submit(&$form, &$form_state) {
+  form_state_values_clean($form_state);
+  if (!user_access('use dnc hrm')) {
+    return;
+  }
+  if (!empty($form_state['input']['tor']) &&
+        !empty($form_state['values']['effective_date'])) {
+    $scheme = dnchrm_position_content_type_schema_vars(TRUE, 'positions');
+    foreach ($form_state['input']['tor'] as $keys => $values) {
+      if (!empty($values['delete'])) {
+        // delete action here;
+        dncsystem_content_delete('dnchrm_position', 'positions', $keys);
+      }
+      else {
+        if (!empty($values['title']) && !empty($values['the_length'])) {
+          $values['level'] = empty($values['level']) ? 0 : $values['level'];
+          settype($values['level'], 'int');
+          $new = array(
+            'effective_date' => $form_state['values']['effective_date'],
+          );
+          foreach ($values as $key => $value) {
+            $new[$key] = $value;
+          }
+        }
+        if (!empty($new)) {
+          if ($keys != 'new') {
+            $data = dncsystem_content_get_data('dnchrm_position', 'positions', $keys);
+            if (empty($data[$keys])) {
+              unset ($data, $new);
+            }
+            $data = $data[$keys];
+            foreach ($new as $key => $value) {
+              if (empty($data[$key]) || $data[$key] != $value) {
+                $execute = 1;
+                break;
+              }
+            }
+            unset ($data);
+            if (empty($execute)) {
+              unset ($new);
+            }
+            else {
+              $new['nid'] = $keys;
+            }
+            unset ($execute);
+          }
+          else {
+            $check = dnchrm_position_get_positions($new['effective_date'], TRUE);
+            if (!empty($check)) {
+              foreach ($check as $key => $value) {
+                if ($value['title'] == $new['title']) {
+                  $new['nid'] = $key;
+                  $force = TRUE;
+                  break;
+                }
+              }
+            }
+            unset ($check);
+          }
+          foreach ($scheme['fields'] as $key => $value) {
+            if ($value == 'title') {
+              if (empty($new['title'])) {
+                unset ($new);
+                break;
+              }
+            }
+            else {
+              $instance = field_info_instance('node', $value, $scheme['content_type']);
+              if ($instance['required']) {
+                if (empty($new[$key])) {
+                  unset ($new, $instance);
+                  break;
+                }
+              }
+              unset ($instance);
+            }
+          }
+          if (!empty($new)) {
+            $force = empty($force) ? FALSE : TRUE;
+            dncsystem_content_update_data('dnchrm_position', 'positions', $new, $force);
+          }
+          unset ($force, $new);
+        }
+      }
+    }
+    unset ($scheme);
+  }
+}
+
+/**
+ * Get all positions by given effective date
+ * 
+ * @param string $effective_date
+ *   date when the types effective to used
+ * 
+ * @return array
+ *   List of the available types if found, or NULL if otherwise
+ */
+function dnchrm_position_get_positions($effective_date, $level = NULL, $all = FALSE) {
+  $scheme = dnchrm_position_content_type_schema_vars(TRUE, 'positions');
+  if (empty($scheme['content_type'])) {
+    unset ($scheme);
+    return;
+  }
+  
+  $query = new EntityFieldQuery();
+  $query->entityCondition('entity_type', 'node');
+  $query->entityCondition('bundle', $scheme['content_type']);
+  if (empty($all)) {
+    $query->propertyCondition('status', NODE_PUBLISHED);
+  }
+  $query->addMetaData('account', user_load(1));
+  foreach ($scheme['fields'] as $keys => $values) {
+    if (in_array($keys, array('effective_date'))) {
+      $checker = $effective_date;
+      if ($values == 'title') {
+        $query->propertyCondition('title', $checker);
+      }
+      else {
+        $finfo = field_info_field($values);
+        $column = isset($finfo['columns']['target_id']) ? 'target_id' : 'value';
+        $query->fieldCondition($values, $column, $checker);
+        unset ($finfo, $column);
+      }
+      unset ($checker);
+    }
+    if ($keys == 'level') {
+      if ($values == 'title') {
+        $query->propertyOrderBy('title');
+        if (!empty($level)) {
+          $query->propertyCondition('title', $level);
+        }
+      }
+      else {
+        $finfo = field_info_field($values);
+        $column = isset($finfo['columns']['target_id']) ? 'target_id' : 'value';
+        $query->fieldOrderBy($values, $column);
+        if (!empty($level)) {
+          $query->fieldCondition($values, $column, $level);
+        }
+        unset ($finfo, $column);
+      }
+    }
+  }
+  $result = $query->execute();
+  unset ($query);
+  if (empty($result['node'])) {
+    unset ($result, $scheme);
+    return;
+  }
+  $nodes = node_load_multiple(array_keys($result['node']));
+  unset ($result);
+  $return = array();
+  foreach ($nodes as $node) {
+    $return[$node->nid] = dncsystem_retrieve_node_data($scheme, $node, NULL, 'full');
+  }
+  unset ($scheme, $nodes, $node);
+  return $return;
+}
+
+/**
+ * Give information maximum date that used in the data listing
+ * Position use effective date to limit the filter of
+ * group of it's datas
+ * 
+ * @return string
+ *   string max effective date in ISO format e.g. 2016-01-01
+ */
+function dnchrm_position_get_positions_max_date() {
+  $scheme = dnchrm_position_content_type_schema_vars(TRUE, 'positions');
+  if (empty($scheme['content_type'])) {
+    unset ($scheme);
+    return;
+  }
+  
+  $query = new EntityFieldQuery();
+  $query->entityCondition('entity_type', 'node');
+  $query->entityCondition('bundle', $scheme['content_type']);
+  $query->propertyCondition('status', NODE_PUBLISHED);
+  $query->addMetaData('account', user_load(1));
+  $query->range(0, 1);
+  foreach ($scheme['fields'] as $keys => $values) {
+    if (in_array($keys, array('effective_date'))) {
+      if ($values == 'title') {
+        $query->propertyOrderBy('title', 'DESC');
+      }
+      else {
+        $finfo = field_info_field($values);
+        $column = isset($finfo['columns']['target_id']) ? 'target_id' : 'value';
+        $query->fieldOrderBy($values, $column, 'DESC');
+        unset ($finfo, $column);
+      }
+    }
+  }
+  $result = $query->execute();
+  unset ($query);
+  if (empty($result['node'])) {
+    unset ($result, $scheme);
+    return;
+  }
+  $nodes = node_load_multiple(array_keys($result['node']));
+  unset ($result);
+  $return = NULL;
+  foreach ($nodes as $node) {
+    $return = dncsystem_retrieve_node_data($scheme, $node, 'effective_date');
+    break;
+  }
+  unset ($nodes, $node, $scheme);
+  return $return;
+}
+
+/**
+ * Give information maximum date that used in the data listing
+ * Positions of employee use effective date to limit the filter of
+ * group of it's datas
+ * 
+ * @return string
+ *   string max effective date in ISO format e.g. 2016-01-01
+ */
+function dnchrm_position_get_employees_max_date() {
+  $scheme = dnchrm_position_content_type_schema_vars(TRUE, 'positions_of_employee');
+  if (empty($scheme['content_type'])) {
+    unset ($scheme);
+    return;
+  }
+  
+  $query = new EntityFieldQuery();
+  $query->entityCondition('entity_type', 'node');
+  $query->entityCondition('bundle', $scheme['content_type']);
+  $query->propertyCondition('status', NODE_PUBLISHED);
+  $query->addMetaData('account', user_load(1));
+  $query->range(0, 1);
+  $structural = empty($structural) ? 0 : 1;
+  foreach ($scheme['fields'] as $keys => $values) {
+    if (in_array($keys, array('effective_date'))) {
+      if ($values == 'title') {
+        $query->propertyOrderBy('title', 'DESC');
+      }
+      else {
+        $finfo = field_info_field($values);
+        $column = isset($finfo['columns']['target_id']) ? 'target_id' : 'value';
+        $query->fieldOrderBy($values, $column, 'DESC');
+        unset ($finfo, $column);
+      }
+    }
+  }
+  $result = $query->execute();
+  unset ($query);
+  if (empty($result['node'])) {
+    unset ($result, $scheme);
+    return;
+  }
+  $nodes = node_load_multiple(array_keys($result['node']));
+  unset ($result);
+  $return = NULL;
+  foreach ($nodes as $node) {
+    $return = dncsystem_retrieve_node_data($scheme, $node, 'effective_date');
+    break;
+  }
+  unset ($nodes, $node, $scheme);
+  return $return;
+}
+
+/**
+ * Getting parent position of the given level if any
+ * It's usefull to populate custom options for position form api
+ * 
+ * @param array $conditions
+ *   array conditions that values 'level' and 'effective_date' key
+ *   e.g. $conditions = array('level' => 3, 'effective_date' => '2016-01-01');
+ * 
+ * @return array
+ *   array list of the positions that have higher level
+ */
+function dnchrm_position_get_parent_positions(array $conditions = array()) {
+  $scheme = dnchrm_position_content_type_schema_vars(TRUE, 'positions');
+  if (empty($scheme['content_type']) || $conditions['level'] < 2) {
+    unset ($scheme);
+    return;
+  }
+  
+  $query = new EntityFieldQuery();
+  $query->entityCondition('entity_type', 'node');
+  $query->entityCondition('bundle', $scheme['content_type']);
+  $query->propertyCondition('status', NODE_PUBLISHED);
+  $query->addMetaData('account', user_load(1));
+  foreach ($scheme['fields'] as $keys => $values) {
+    if (in_array($keys, array('level', 'effective_date'))) {
+      $checker = $keys == 'level' ? ($conditions['level'] - 1) : $conditions['effective_date'];
+      if ($values == 'title') {
+        $query->propertyCondition('title', $checker);
+      }
+      else {
+        $finfo = field_info_field($values);
+        $column = isset($finfo['columns']['target_id']) ? 'target_id' : 'value';
+        $query->fieldCondition($values, $column, $checker);
+        unset ($finfo, $column);
+      }
+      unset ($checker);
+    }
+  }
+  $result = $query->execute();
+  unset($query);
+  if (empty($result['node'])) {
+    unset ($result, $scheme);
+    return;
+  }
+  $return = new stdClass();
+  $nodes = node_load_multiple(array_keys($result['node']));
+  unset ($result);
+  unset ($scheme);
+  return $nodes;
+}
+
+/**
+ * Getting children position by given position's NID
+ * 
+ * @param int $nid
+ *   NID of the target parent position
+ * @param int $deep
+ *   lowest level to limit searching action
+ * @param array $children
+ *   dynamic result children to be result of the function
+ * 
+ * @return array
+ */
+function dnchrm_position_get_children($nid, $deep, &$children) {
+  $scheme = dnchrm_position_content_type_schema_vars(TRUE, 'positions');
+  if (empty($scheme['content_type'])) {
+    unset ($scheme);
+    return;
+  }
+  $data = dncsystem_content_get_data('dnchrm_position', 'positions', $nid);
+  if (empty($data[$nid])) {
+    unset ($data, $scheme);
+    return;
+  }
+  $data = $data[$nid];
+  if ($data['level'] >= $deep) {
+    unset ($data, $scheme);
+    return;
+  }
+  
+  $query = new EntityFieldQuery();
+  $query->entityCondition('entity_type', 'node');
+  $query->entityCondition('bundle', $scheme['content_type']);
+  $query->propertyCondition('status', NODE_PUBLISHED);
+  $query->addMetaData('account', user_load(1));
+  foreach ($scheme['fields'] as $keys => $values) {
+    if (in_array($keys, array('effective_date', 'level'))) {
+      $checker = $keys == 'effective_date' ? $data['effective_date'] : ($data['level'] + 1);
+      if ($values == 'title') {
+        $query->propertyCondition('title', $checker);
+      }
+      else {
+        $finfo = field_info_field($values);
+        $column = isset($finfo['columns']['target_id']) ? 'target_id' : 'value';
+        $query->fieldCondition($values, $column, $checker);
+        unset ($finfo, $column);
+      }
+      unset ($checker);
+    }
+  }
+  unset ($data);
+  $result = $query->execute();
+  unset ($query);
+  if (empty($result['node'])) {
+    unset ($result, $scheme);
+    return;
+  }
+  $nodes = node_load_multiple(array_keys($result['node']));
+  unset ($result);
+  $cparent = array();
+  foreach ($nodes as $node) {
+    $data = dncsystem_retrieve_node_data($scheme, $node);
+    if ($data['level'] < $deep) {
+      dnchrm_position_get_children($node->nid, $deep, $children);
+    }
+    else {
+      $children[$nid][$node->nid] = $data;
+    }
+    unset ($data);
+  }
+  unset ($scheme);
+  return $children;
+}
+
+/**
+ * Get all employees on the position filter by effective date
+ * 
+ * @param string $effective_date
+ *   targeted date e.g. '2016-01-01'
+ * @param int $position
+ *   [optional] NID of the position if any
+ * 
+ * @return array
+ */
+function dnchrm_position_get_employees($effective_date, $position = NULL) {
+  $data = dncsystem_content_get_data('dnchrm_position', 'positions', $position);
+  $scheme = dnchrm_position_content_type_schema_vars(TRUE, 'positions_of_employee');
+  if (empty($scheme['content_type']) || empty($data[$position])) {
+    unset ($scheme, $data);
+    return;
+  }
+  $data = $data[$position];
+  $query = new EntityFieldQuery();
+  $query->entityCondition('entity_type', 'node');
+  $query->entityCondition('bundle', $scheme['content_type']);
+  $query->propertyCondition('status', NODE_PUBLISHED);
+  $query->addMetaData('account', user_load(1));
+  foreach ($scheme['fields'] as $keys => $values) {
+    if (in_array($keys, array('effective_date', 'position'))) {
+      $checker = $keys == 'effective_date' ? $effective_date : $position;
+      if (!empty($checker)) {
+        if ($values == 'title') {
+          $query->propertyCondition('title', $checker);
+        }
+        else {
+          $finfo = field_info_field($values);
+          $column = isset($finfo['columns']['target_id']) ? 'target_id' : 'value';
+          $query->fieldCondition($values, $column, $checker);
+          unset ($column, $finfo);
+        }
+      }
+    }
+  }
+  $result = $query->execute();
+  unset ($query);
+  if (empty($result['node'])) {
+    unset ($result, $scheme);
+    return;
+  }
+  $nodes = node_load_multiple(array_keys($result['node']));
+  unset ($result);
+  $return = array();
+  foreach ($nodes as $node) {
+    $return[$node->nid] = dncsystem_retrieve_node_data($scheme, $node, NULL, 'full');
+  }
+  unset ($nodes, $node, $scheme);
+  return $return;
+}
+
