@@ -1,0 +1,14 @@
+<?php
+
+/**
+ * @file
+ * Install, update and uninstall functions for the features module.
+ */
+
+/**
+ * Implements hook_install().
+ */
+function dnchrm_dynamic_uninstall() {
+  variable_del('dnchrm_dynamic_content_types');
+  variable_del('dnchrm_dynamic_active_context');
+}

@@ -162,7 +162,6 @@ function dnchrm_position_form_node_form_alter(&$form, &$form_state, $form_id) {
             }
           }
         }
-//        echo '<pre>'; print_r($form[$values['fields']['effective_date']]); echo '</pre>'; exit;
       }
     }
   }

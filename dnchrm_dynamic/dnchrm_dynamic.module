@@ -1,0 +1,462 @@
+<?php
+
+/* 
+ * Copyright (C) 2016 denic wibowo
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
+/**
+ * @file
+ * Module to handle dynamic personality datas of human resource management
+ * 
+ * Handling dynamic personality datas of management of human resources
+ */
+
+/**
+ * Implementation of hook_load
+ * @return arg
+ **/
+function dnchrm_dynamic_load($arg) {
+  return check_plain($arg);
+}
+
+/**
+ * Implementation of hook_menu
+ * 
+ * @return array
+ */
+function dnchrm_dynamic_menu() {
+  $items = array();
+  $items['admin/config/dncsystem/dnchrm/dp'] = array(
+    'title' => 'Dynamic Personalities Params',
+    'description' => 'Dynamic personality parameters and configurations',
+    'access arguments' => array('administer site configuration'),
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('dnchrm_dynamic_admin_params'),
+    'file' => 'dnchrm_dynamic.admin.inc',
+  );
+  $activecontext = variable_get('dnchrm_dynamic_active_context', array());
+  if (!empty($activecontext['personal_characteristics'])) {
+    $items['dnchrm/bio/%dnchrm_dynamic/characteristics'] = array(
+      'title' => 'Characteristics',
+      'description' => 'Personal characteristic data information',
+      'access arguments' => array('view dnc hrm'),
+      'page callback' => 'drupal_get_form',
+      'page arguments' => array('dnchrm_dynamic_characteristic', 2),
+      'type' => MENU_LOCAL_TASK,
+      'file' => 'dnchrm_dynamic.characteristic.inc',
+      'weight' => 10,
+    );
+    $items['dnchrm/bio/%dnchrm_dynamic/characteristics/add'] = array(
+      'title' => 'Add',
+      'description' => 'Add personal data characteristic',
+      'access arguments' => array('use dnc hrm'),
+      'page callback' => 'drupal_get_form',
+      'page arguments' => array('dnchrm_dynamic_characteristic_add', 2),
+      'type' => MENU_LOCAL_ACTION,
+      'file' => 'dnchrm_dynamic.characteristic.inc',
+    );
+    $items['dnchrm-dynamic/%ctools_js/form/setpc'] = array(
+      'title' => 'Add Characteristic Type',
+      'description' => 'Adding personal characteristic reference',
+      'page callback' => 'dnchrm_dynamic_add_new_pc_popup',
+      'page arguments' => array(1),
+      'access arguments' => array('use dnc hrm'),
+      'type' => MENU_CALLBACK,
+      'file' => 'dnchrm_dynamic.characteristic.inc',
+    );
+  }
+  if (!empty($activecontext['social_identities'])) {
+    $items['dnchrm/bio/%dnchrm_dynamic/identities'] = array(
+      'title' => 'Social Identities',
+      'description' => 'Social identity datas information of the person',
+      'access arguments' => array('view dnc hrm'),
+      'page callback' => 'drupal_get_form',
+      'page arguments' => array('dnchrm_dynamic_identity', 2),
+      'type' => MENU_LOCAL_TASK,
+      'file' => 'dnchrm_dynamic.identity.inc',
+      'weight' => 20,
+    );
+    $items['dnchrm/bio/%dnchrm_dynamic/identities/add'] = array(
+      'title' => 'Add',
+      'description' => 'Add personal data social identity',
+      'access arguments' => array('use dnc hrm'),
+      'page callback' => 'drupal_get_form',
+      'page arguments' => array('dnchrm_dynamic_identity_add', 2),
+      'type' => MENU_LOCAL_ACTION,
+      'file' => 'dnchrm_dynamic.identity.inc',
+    );
+    $items['dnchrm-dynamic/%ctools_js/form/setidentity'] = array(
+      'title' => 'Add Types of Identity',
+      'description' => 'Adding types of identity reference',
+      'page callback' => 'dnchrm_dynamic_add_new_types_of_identity_popup',
+      'page arguments' => array(1),
+      'access arguments' => array('use dnc hrm'),
+      'type' => MENU_CALLBACK,
+      'file' => 'dnchrm_dynamic.identity.inc',
+    );
+  }
+  if (!empty($activecontext['formal_addresses'])) {
+    $items['dnchrm/bio/%dnchrm_dynamic/addresses'] = array(
+      'title' => 'Addresses',
+      'description' => 'Formal address datas information of the person',
+      'access arguments' => array('view dnc hrm'),
+      'page callback' => 'drupal_get_form',
+      'page arguments' => array('dnchrm_dynamic_address', 2),
+      'type' => MENU_LOCAL_TASK,
+      'file' => 'dnchrm_dynamic.address.inc',
+      'weight' => 65,
+    );
+    $items['dnchrm/bio/%dnchrm_dynamic/addresses/add'] = array(
+      'title' => 'Add',
+      'description' => 'Add personal data address',
+      'access arguments' => array('use dnc hrm'),
+      'page callback' => 'drupal_get_form',
+      'page arguments' => array('dnchrm_dynamic_address_add', 2),
+      'type' => MENU_LOCAL_ACTION,
+      'file' => 'dnchrm_dynamic.address.inc',
+    );
+  }
+  if (!empty($activecontext['employee_religions'])) {
+    $items['dnchrm-dynamic/%ctools_js/form/setreligion'] = array(
+      'title' => 'Add Religion',
+      'description' => 'Adding religion reference',
+      'page callback' => 'dnchrm_dynamic_add_new_religion_popup',
+      'page arguments' => array(1),
+      'access arguments' => array('use dnc hrm'),
+      'type' => MENU_CALLBACK,
+      'file' => 'dnchrm_dynamic.religion.inc',
+    );
+  }
+  
+  return $items;
+}
+
+/**
+ * Get content type scheme that be used in the system
+ * It can be source of the script or result from converting action
+ * 
+ * @param boolean $localConvert
+ *   True will get the result convert, or false for the source
+ * @param array $field
+ *   Source field name, can be array, string or NULL
+ *   This param will limit the output result on given field name
+ * 
+ * @return array
+ *   Resulting scheme of source or convert result
+ */
+function dnchrm_dynamic_content_type_schema_vars($localConvert = FALSE, $field = NULL, $justinfos = FALSE) {
+  $source = array(
+    'types_of_pc' => array('title'),
+    'personal_characteristics' => array('type_of_pc', 'person', 'title'),
+    'religions' => array('title', 'abbreviation'),
+    'employee_religions' => array('title', 'person', 'religion', 'date_changed'),
+    'types_of_identity' => array('title'),
+    'social_identities' => array('type_of_identity', 'person', 'title'),
+    'formal_addresses' => array('social_identity', 'person', 'title', 'city', 'province', 'country'),
+  );
+  if ($localConvert !== FALSE) {
+    $source = dncctypevars_get_ctype_scheme_vars('dnchrm_dynamic', $source);
+  }
+  else {
+    if ($justinfos !== FALSE) {
+      $source = dncctypevars_get_scheme_infos('dnchrm_dynamic', $source);
+    }
+  }
+  return empty($field) ? $source : (empty($source[$field]) ? NULL : $source[$field]);
+}
+
+/**
+ * Listing data persons that have dynamic personalities
+ * 
+ * @param array $form
+ * @param array $form_state
+ * @return string|array
+ */
+function dnchrm_dynamic_person_listing(array $form = array(), array $form_state = array()) {
+  $scheme = dnchrm_content_type_schema_vars(TRUE, 'persons');
+  if (empty($scheme['content_type'])) {
+    unset ($scheme);
+    return;
+  }
+  $nodetype = node_type_get_type($scheme['content_type']);
+  $table = array();
+  $table['header'] = array(
+    'num' => array(
+      'data' => t('Num.'),
+      'width' => '5%',
+      'style' => 'text-align: right',
+      'type' => 'constant',
+    ),
+    'person' => array(
+      'data' => $nodetype->title_label,
+    ),
+    'age' => array(
+      'data' => t('Age'),
+    ),
+  );
+  $limit = 10;
+  $query = new EntityFieldQuery();
+  $query->entityCondition('entity_type', 'node');
+  $query->entityCondition('bundle', $scheme['content_type']);
+  $query->propertyCondition('status', NODE_PUBLISHED);
+  $query->addMetaData('account', user_load(1));
+  $query->pager($limit);
+  $query->tableSort($table['header']);
+  $result = $query->execute();
+  unset ($query);
+  if (empty($result['node'])) {
+    unset ($result);
+    return $form;
+  }
+  $table['rows'] = array();
+  $nodes = node_load_multiple(array_keys($result['node']));
+  $page = empty($_REQUEST['page']) ? 0 : $_REQUEST['page'];
+  $i = ($page * $limit) + 1;
+  unset ($result, $page, $limit);
+  foreach ($nodes as $node) {
+    $rows = array();
+    $data = dncsystem_retrieve_node_data($scheme, $node, NULL, 'default');
+    $rows['num'] = array(
+      'data' => $i . '.',
+      'style' => 'text-align: right',
+    );
+    $pview = l($data['title'], 'dnchrm/dynamic/' . $node->nid); 
+    $rows['person'] = array(
+      'data' => $pview,
+    );
+    unset ($pview);
+    $rows['age'] = array(
+      'data' => dncsystem_count_age($data['date_of_birth'], FALSE, TRUE),
+    );
+    $table['rows'][$node->nid] = $rows;
+    unset ($data, $rows);
+    $i++;
+  }
+  unset ($scheme, $i);
+  $form['ctable'] = array(
+    '#type' => 'item',
+    '#markup' => theme('table', $table),
+    '#weight' => 20,
+  );
+  unset ($table);
+  return $form;
+}
+
+/**
+ * Implementing hook_form_node_form_alter
+ * to embeded some information and popup link form
+ * and add integrity data person in some content type
+ * 
+ * @param array $form
+ * @param array $form_state
+ * @param string $form_id
+ * 
+ * @return array
+ */
+function dnchrm_dynamic_form_node_form_alter(&$form, &$form_state, $form_id) {
+  $scheme = dnchrm_dynamic_content_type_schema_vars(TRUE);
+  $activecontext = variable_get('dnchrm_dynamic_active_context', array());
+  foreach ($scheme as $keys => $values) {
+    if ($form['#node']->type == $values['content_type']) {
+      if (!in_array($keys, array('types_of_pc', 'religions', 'types_of_identity'))) {
+        if (empty($activecontext[$keys])) {
+          drupal_set_message(t('Sorry this context is not active yet :('), 'error', FALSE);
+          drupal_goto('<front>');
+          return;
+        }
+      }
+      if (!user_access('use dnc hrm') || $keys == 'employee_religions') {
+        if (!user_access('use dnc hrm')) {
+          drupal_set_message(t('Sorry you unauthorized :('), 'error', FALSE);
+        }
+        elseif($keys == 'employee_religions') {
+          drupal_set_message(t('Please use this menu to input religion of the person'), 'warning', FALSE);
+        }
+        drupal_goto('dnchrm/bio');
+        return;
+      }
+    }
+    if (!empty($values['fields']['person'])) {
+      if ($form['#node']->type == $values['content_type']) {
+        if (empty($form['#node']->{$values['fields']['person']}[$form[$values['fields']['person']]['#language']])) {
+          drupal_set_message(t('Please use this menu to update this content type'), 'error', FALSE);
+          drupal_set_message(t('Choose one of the person by clicking on the name'), 'error', FALSE);
+          drupal_goto('dnchrm/bio');
+          return;
+        }
+        $instance = field_info_instance('node', $values['fields']['person'], $values['content_type']);
+        if ($instance['widget']['type'] == 'entityreference_autocomplete') {
+          $form[$values['fields']['person']][$form[$values['fields']['person']]['#language']][0]['target_id']['#type'] = 'hidden';
+        }
+        else {
+          $form[$values['fields']['person']][$form[$values['fields']['person']]['#language']]['#type'] = 'hidden';
+        }
+        unset ($instance);
+      }
+    }
+    if (!empty($values['fields']['formal'])) {
+      if ($form['#node']->type == $values['content_type']) {
+        if (empty($form['#node']->{$values['fields']['formal']}[$form[$values['fields']['formal']]['#language']])) {
+          drupal_set_message(t('Please use this menu to update this content type'), 'error', FALSE);
+          drupal_set_message(t('Choose one of the formal education'), 'error', FALSE);
+          drupal_goto('dnchrm/dynamic/' . $form['#node']->{$values['fields']['person']}[$form[$values['fields']['person']]['#language']][0]['target_id']['#default_value'] . '/formals/add');
+          return;
+        }
+        $instance = field_info_instance('node', $values['fields']['formal'], $values['content_type']);
+        if ($instance['widget']['type'] == 'entityreference_autocomplete') {
+          $form[$values['fields']['formal']][$form[$values['fields']['formal']]['#language']][0]['target_id']['#type'] = 'hidden';
+        }
+        else {
+          $form[$values['fields']['formal']][$form[$values['fields']['formal']]['#language']]['#type'] = 'hidden';
+        }
+        unset ($instance);
+      }
+    }
+    if (!empty($values['fields']['type_of_pc']) || !empty($values['fields']['type_of_identity'])) {
+      if ($form['#node']->type == $values['content_type']) {
+        ctools_include('ajax');
+        ctools_include('modal');
+        ctools_modal_add_js();
+        dnchrm_set_modal_settings('medium');
+        $editlink = ctools_modal_text_button(
+          t('here'),
+          'dnchrm-dynamic/nojs/form/set' . ($keys == 'personal_characteristics' ? 'pc' : 'identity'),
+          t('Add New Type of @title', array('@title' => $keys == 'personal_characteristics' ? 'Personal Characters' : 'Social Identity')),
+          'ctools-modal-dnchrm-modal-style'
+        );
+        
+        if (!empty($values['fields']['type_of_pc'])) {
+          $form[$values['fields']['type_of_pc']][$form[$values['fields']['type_of_pc']]['#language']]['#description'] .= '<br />' . t('If there are no choosed choices above, you can add one') . ' ' . $editlink;
+        }
+        if (!empty($values['fields']['type_of_identity'])) {
+          $form[$values['fields']['type_of_identity']][$form[$values['fields']['type_of_identity']]['#language']]['#description'] .= '<br />' . t('If there are no choosed choices above, you can add one') . ' ' . $editlink;
+        }
+        unset ($editlink);
+      }
+    }
+    if (!empty($values['fields']['social_identity'])) {
+      if ($form['#node']->type == $values['content_type']) {
+        $finfo = field_info_field($values['fields']['social_identity']);
+        $column = isset($finfo['columns']['target_id']) ? 'target_id' : 'value';
+        $getrefs = dnchrm_get_data_by_person($form['#node']->{$values['fields']['person']}['und'][0][$column], 'dnchrm_dynamic', 'social_identities', NULL, 'full');
+        unset ($finfo, $column);
+        if (!empty($getrefs)) {
+          $form[$values['fields']['social_identity']][$form[$values['fields']['social_identity']]['#language']]['#options'] = array('_none' => '- ' . t('Select a value') . ' -');
+          foreach ($getrefs as $key => $value) {
+            $form[$values['fields']['social_identity']][$form[$values['fields']['social_identity']]['#language']]['#options'][$value['nid']] = '(' . $value['v_type_of_identity']['#markup'] . ') ' . $value['title'];
+          }
+        }
+        unset ($getrefs);
+      }
+    }
+  }
+  unset ($scheme);
+  if (!empty($activecontext['employee_religions'])) {
+    $scheme = dnchrm_content_type_schema_vars(TRUE, 'persons');
+    if ($form['#node']->type == $scheme['content_type']) {
+      ctools_include('ajax');
+      ctools_include('modal');
+      ctools_modal_add_js();
+      dnchrm_set_modal_settings('medium');
+      $editlink = ctools_modal_text_button(
+        t('here'),
+        'dnchrm-dynamic/nojs/form/setreligion',
+        t('Add New Religion'),
+        'ctools-modal-dnchrm-modal-style'
+      );
+      module_load_include('inc', 'dnchrm_dynamic', 'dnchrm_dynamic.religion');
+      $religions = dnchrm_dynamic_get_all_religions();
+      $form['religion'] = array(
+        '#type' => 'select',
+        '#title' => t('Religion'),
+        '#description' => t('If there are no choosed choices above, you can add one') . ' ' . $editlink,
+        '#options' => $religions,
+      );
+      unset ($religions);
+      $form['actions']['submit']['#submit'][] = 'dnchrm_dynamic_save_persons_religion';
+    }
+    unset ($scheme);
+  }
+  unset ($activecontext);
+}
+
+function dnchrm_dynamic_save_persons_religion(&$form, &$form_state) {
+  if (!empty($form_state['values']['nid']) && !empty($form_state['input']['religion'])) {
+    module_load_include('inc', 'dnchrm_dynamic', 'dnchrm_dynamic.religion');
+    $default = dnchrm_dynamic_get_religion_by_person($form_state['values']['nid']);
+    if (empty($default['religion']) || $form_state['input']['religion'] != $default['religion']) {
+      $scheme = dnchrm_dynamic_content_type_schema_vars(TRUE, 'employee_religions');
+      $religion = node_load($form_state['input']['religion']);
+      if (empty($default)) {
+        $node = new stdClass();
+        $node->type = $scheme['content_type'];
+        $node->title = $religion->title;
+        $node->language = LANGUAGE_NONE;
+        node_object_prepare($node);
+      }
+      else {
+        $default['nid'] = !empty($default['nid']) ? $default['nid'] : $form_state['values']['nid'];
+        $node = node_load($default['nid']);
+      }
+      foreach ($scheme['fields'] as $keys => $values) {
+        $theval = $keys == 'person' ? $form_state['values']['nid'] : ($keys == 'religion' ? $form_state['input']['religion'] : ($keys == 'date_changed' ? date('Y-m-d', time()) : $religion->title));
+        if ($values == 'title') {
+          $node->title = $theval;
+        }
+        else {
+          $finfo = field_info_field($values);
+          $column = isset($finfo['columns']['target_id']) ? 'target_id' : 'value';
+          $node->{$values}[$node->language][0][$column] = $theval;
+          if ($finfo['type'] == 'entityreference') {
+            $node->{$values}[$node->language][0]['entity_type'] = $finfo['settings']['target_type'];
+          }
+          unset ($finfo, $column);
+        }
+        unset ($theval);
+      }
+      unset ($scheme, $religion);
+      if (empty($node->nid)) {
+        node_submit($node);
+      }
+      node_save($node);
+      unset ($node);
+    }
+    unset ($default);
+  }
+}
+
+function dnchrm_dynamic_node_view($node, $view_mode, $langcode) {
+  $scheme = dnchrm_content_type_schema_vars(TRUE, 'persons');
+  if (empty($scheme['content_type'])) {
+    unset ($scheme);
+    return;
+  }
+  if ($node->type == $scheme['content_type']) {
+    module_load_include('inc', 'dnchrm_dynamic', 'dnchrm_dynamic.religion');
+    $religion = dnchrm_dynamic_get_religion_by_person($node->nid);
+    if (!empty($religion['religion'])) {
+      $node->content['religion'] = array(
+        '#markup' => '<strong>' . t('Religion') . '</strong>: ' . $religion['v_religion']['#markup'],
+        '#title' => t('Religion'),
+        '#weight' => 20,
+        '#label_display' => 'hidden',
+      );
+    }
+    unset ($religion);
+  }
+  unset ($scheme);
+}
+

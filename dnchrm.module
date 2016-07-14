@@ -140,7 +140,7 @@ function dnchrm_menu() {
     'page arguments' => array('dnchrm_bio_domicile_manage', 2),
     'file' => 'dnchrm.domicile.inc',
     'type' => MENU_LOCAL_TASK,
-    'weight' => 2,
+    'weight' => 60,
   );
   $items['dnchrm/bio/%dnchrm/domiciles/add'] = array(
     'title' => 'Add',
@@ -832,20 +832,25 @@ function dnchrm_build_tabled_infos_form(&$form, &$form_state) {
               }
               elseif ($finfo['type'] == 'entityreference') {
                 $options = array();
-                $conditions = array();
-                foreach ($finfo['settings']['handler_settings']['target_bundles'] as $vl) {
-                  if (!empty($vl)) {
-                    $conditions['type'][] = $vl;
-                  }
+                if (!empty($form_state['storage']['entityreference_custom'][$key]['options'])) {
+                  $options = $form_state['storage']['entityreference_custom'][$key]['options'];
                 }
-                $dump = entity_load($finfo['settings']['target_type'], FALSE, array('type' => $conditions));
-                unset ($conditions);
-                if (!empty($dump)) {
-                  foreach ($dump as $node) {
-                    $options[$node->nid] = $node->title;
+                else {
+                  $conditions = array();
+                  foreach ($finfo['settings']['handler_settings']['target_bundles'] as $vl) {
+                    if (!empty($vl)) {
+                      $conditions['type'][] = $vl;
+                    }
                   }
+                  $dump = entity_load($finfo['settings']['target_type'], FALSE, array('type' => $conditions));
+                  unset ($conditions);
+                  if (!empty($dump)) {
+                    foreach ($dump as $node) {
+                      $options[$node->nid] = $node->title;
+                    }
+                  }
+                  unset ($dump);
                 }
-                unset ($dump);
                 ${$key}['#type'] = 'select';
                 ${$key}['#options'] = $options;
                 unset ($options);
