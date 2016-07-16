@@ -1,0 +1,13 @@
+<?php
+
+/**
+ * @file
+ * Install, update and uninstall functions for the features module.
+ */
+
+/**
+ * Implements hook_install().
+ */
+function dnchrm_experience_uninstall() {
+  variable_del('dnchrm_experience_content_types');
+}

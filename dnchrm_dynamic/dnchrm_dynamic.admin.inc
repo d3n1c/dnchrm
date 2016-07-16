@@ -43,6 +43,7 @@ function dnchrm_dynamic_admin_params(array $form = array(), array $form_state = 
       'employee_religions' => t('Employee Religions'),
       'social_identities' => t('Social Identities'),
       'formal_addresses' => t('Formal Addresses'),
+      'mastery_of_languages' => t('Mastery of Language'),
     ),
     '#default_value' => variable_get('dnchrm_dynamic_active_context', array()),
   );

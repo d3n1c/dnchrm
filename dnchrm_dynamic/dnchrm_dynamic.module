@@ -129,6 +129,27 @@ function dnchrm_dynamic_menu() {
       'file' => 'dnchrm_dynamic.address.inc',
     );
   }
+  if (!empty($activecontext['mastery_of_languages'])) {
+    $items['dnchrm/bio/%dnchrm_dynamic/languages'] = array(
+      'title' => 'Languages',
+      'description' => 'Mastery of languages information of the person',
+      'access arguments' => array('view dnc hrm'),
+      'page callback' => 'drupal_get_form',
+      'page arguments' => array('dnchrm_dynamic_language', 2),
+      'type' => MENU_LOCAL_TASK,
+      'file' => 'dnchrm_dynamic.language.inc',
+      'weight' => 65,
+    );
+    $items['dnchrm/bio/%dnchrm_dynamic/languages/add'] = array(
+      'title' => 'Add',
+      'description' => 'Add personal data language',
+      'access arguments' => array('use dnc hrm'),
+      'page callback' => 'drupal_get_form',
+      'page arguments' => array('dnchrm_dynamic_language_add', 2),
+      'type' => MENU_LOCAL_ACTION,
+      'file' => 'dnchrm_dynamic.language.inc',
+    );
+  }
   if (!empty($activecontext['employee_religions'])) {
     $items['dnchrm-dynamic/%ctools_js/form/setreligion'] = array(
       'title' => 'Add Religion',
@@ -166,6 +187,7 @@ function dnchrm_dynamic_content_type_schema_vars($localConvert = FALSE, $field =
     'types_of_identity' => array('title'),
     'social_identities' => array('type_of_identity', 'person', 'title'),
     'formal_addresses' => array('social_identity', 'person', 'title', 'city', 'province', 'country'),
+    'mastery_of_languages' => array('title', 'person', 'listen', 'read', 'write', 'speak'),
   );
   if ($localConvert !== FALSE) {
     $source = dncctypevars_get_ctype_scheme_vars('dnchrm_dynamic', $source);

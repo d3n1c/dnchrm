@@ -826,6 +826,9 @@ function dnchrm_build_tabled_infos_form(&$form, &$form_state) {
                   }
                 }
               }
+              elseif($instance['widget']['type'] == 'options_onoff') {
+                ${$key}['#type'] = 'checkbox';
+              }
               elseif (preg_match('/^list/', $finfo['type'])) {
                 ${$key}['#type'] = 'select';
                 ${$key}['#options'] = $finfo['settings']['allowed_values'];
